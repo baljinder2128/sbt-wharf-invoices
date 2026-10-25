@@ -65,6 +65,9 @@ button,input,select,textarea{font:inherit;color:inherit}
 .sync{font-size:11px;color:var(--mast-muted);display:flex;align-items:center;gap:6px;white-space:nowrap}
 .sync i{width:7px;height:7px;border-radius:50%;background:var(--mast-muted);display:inline-block}
 .sync.cloud i{background:#5CC892}
+.hdr-right{display:flex;align-items:center;gap:10px}
+.hdr-out{background:none;border:1px solid var(--mast-muted);color:var(--mast-ink);border-radius:6px;font:inherit;font-size:12px;font-weight:600;padding:4px 10px;cursor:pointer}
+.hdr-out[hidden]{display:none}
 
 /* bottom tabs (phone) */
 .tabs{display:none}
@@ -269,7 +272,8 @@ select.in{appearance:none;background-image:linear-gradient(45deg,transparent 50%
       <button data-nav="settings">Settings</button>
       <button class="btn accent sm" data-action="new-invoice" style="margin-left:8px">+ New invoice</button>
     </nav>
-    <div class="sync" id="sync"><i></i><span>Connecting</span></div>
+    <div class="hdr-right"><div class="sync" id="sync"><i></i><span>Connecting</span></div>
+      <button class="hdr-out" id="hdrOut" data-action="logout" hidden>Log out</button></div>
   </div>
 </header>
 
@@ -551,6 +555,7 @@ function updateHeader(){
   $('#bizName').textContent = 'Wharf invoices';
   const navView = state.view === 'preview' || state.view === 'edit' ? 'invoices' : state.view;
   document.querySelectorAll('[data-nav]').forEach(b => b.setAttribute('aria-current', b.dataset.nav === navView ? 'true' : 'false'));
+  const out = $('#hdrOut'); if (out) out.hidden = !(state.ready && !state.auth && (Store.fbAuth?.currentUser || Store.mode === 'server'));
 }
 function render(){
   updateHeader();

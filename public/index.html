@@ -344,7 +344,7 @@ const DEFAULT_SETTINGS = {
   bank:{accountName:'', bankName:'', bsb:'', accountNumber:''},
   invoice:{title:'TAX INVOICE', prefix:'INV-', nextNumber:1, dueDays:7, taxEnabled:true, taxLabel:'GST', taxRate:10, currency:'$',
     notes:'Thank you for your business. Please pay within the terms shown, quoting the invoice number.'},
-  rates:{perTonne:true, minTonnes:24, fuelLevy:15, freeMinutes:90, blockMinutes:15, hourly:60, card:[]},
+  rates:{perTonne:true, minTonnes:24, fuelLevy:15, freeMinutes:90, blockMinutes:15, hourly:60, oversizePct:20, card:[]},
   columns: DEFAULT_COLUMNS
 };
 const TYPE_LABEL = {text:'Text', date:'Date', time:'Time', number:'Number', weight:'Weight in kg', money:'Money', suburb:'Suburb (uses rate card)', waiting:'Waiting charge (calculated)', amount:'Amount (calculated)'};
@@ -459,7 +459,7 @@ async function safe(p, ok){ try { await p; if (ok) toast(ok); return true; } cat
 
 /* ---------- invoice maths ---------- */
 function waitParams(inv){ const w = {...state.settings.rates, ...((inv && inv.waiting) || {})}; return {free: num(w.freeMinutes), hourly: num(w.hourly), block: num(w.blockMinutes)}; }
-function pricing(inv){ const p = {...state.settings.rates, ...((inv && inv.pricing) || {})}; return {perTonne: !!p.perTonne, minTonnes: num(p.minTonnes), fuelLevy: num(p.fuelLevy)}; }
+function pricing(inv){ const p = {...state.settings.rates, ...((inv && inv.pricing) || {})}; return {perTonne: !!p.perTonne, minTonnes: num(p.minTonnes), fuelLevy: num(p.fuelLevy), oversizePct: num(p.oversizePct)}; }
 function toMin(t){ const m = /^(\d{1,2}):(\d{2})/.exec(String(t||'')); return m ? (+m[1]) * 60 + (+m[2]) : null; }
 const fmtHM = m => `${Math.floor(m/60)}:${pad(Math.round(m%60))}`;
 function waitInfo(inv, values){
@@ -490,15 +490,18 @@ function totals(inv){
   const items = inv.items || [];
   const cart = items.reduce((s, r) => s + cartage(inv, r.values || {}), 0);
   const dem = items.reduce((s, r) => s + waitInfo(inv, r.values || {}).charge, 0);
-  const levyPct = pricing(inv).fuelLevy, levy = Math.round((cart + dem) * levyPct) / 100;
-  const subtotal = Math.round((cart + dem + levy) * 100) / 100;
+  const overPct = inv.oversize ? pricing(inv).oversizePct : 0, oversize = Math.round(cart * overPct) / 100;
+  const levyPct = pricing(inv).fuelLevy, levy = Math.round((cart + oversize + dem) * levyPct) / 100;
+  const subtotal = Math.round((cart + oversize + dem + levy) * 100) / 100;
   const tax = inv.taxEnabled ? Math.round(subtotal * num(inv.taxRate)) / 100 : 0;
-  return {cartage: cart, demurrage: dem, levy, levyPct, subtotal, tax, total: subtotal + tax};
+  return {cartage: cart, oversize, overPct, demurrage: dem, levy, levyPct, subtotal, tax, total: subtotal + tax};
 }
 function totalRows(inv, t){
   const r = [];
-  if (t.levy || t.demurrage) { r.push(['Cartage', t.cartage]); if (t.demurrage) r.push(['Demurrage', t.demurrage]); if (t.levy) r.push([`Fuel levy (${t.levyPct}%)`, t.levy]); }
-  r.push([t.levy || t.demurrage ? 'Subtotal (ex GST)' : 'Subtotal', t.subtotal]);
+  const split = t.levy || t.demurrage || t.oversize;
+  if (split) { r.push(['Cartage', t.cartage]); if (t.oversize) r.push([`Oversize / extendable (${t.overPct}%)`, t.oversize]);
+    if (t.demurrage) r.push(['Demurrage', t.demurrage]); if (t.levy) r.push([`Fuel levy (${t.levyPct}%)`, t.levy]); }
+  r.push([split ? 'Subtotal (ex GST)' : 'Subtotal', t.subtotal]);
   if (inv.taxEnabled) r.push([`${inv.taxLabel} (${inv.taxRate}%)`, t.tax]);
   return r;
 }
@@ -657,7 +660,7 @@ function newDraft(companyId){
     companyId:'', billTo:{name:'', contact:'', abn:'', address:'', email:'', phone:'', ref:''},
     columns: clone(s.columns), items:[], notes: inv.notes, status:'unpaid',
     waiting: {freeMinutes: num(s.rates.freeMinutes), hourly: num(s.rates.hourly), blockMinutes: num(s.rates.blockMinutes)},
-    pricing: {perTonne: !!s.rates.perTonne, minTonnes: num(s.rates.minTonnes), fuelLevy: num(s.rates.fuelLevy)},
+    pricing: {perTonne: !!s.rates.perTonne, minTonnes: num(s.rates.minTonnes), fuelLevy: num(s.rates.fuelLevy), oversizePct: num(s.rates.oversizePct)}, oversize: false,
     taxEnabled: !!inv.taxEnabled, taxLabel: inv.taxLabel, taxRate: num(inv.taxRate), currency: inv.currency, title: inv.title};
   if (companyId) applyCompany(d, companyId);
   d.items.push(blankRow(d));
@@ -715,7 +718,7 @@ function viewEditor(){
         <div class="panel-b stack">
           ${colsDiffer ? `<div class="notice" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>This invoice uses an older column layout.</span><button class="btn sm" data-action="use-current-cols">Switch to current columns</button></div>` : ''}
           <datalist id="suburbList">${[...new Set((state.settings.rates.card||[]).flatMap(r => zoneSuburbs(r.suburb)))].map(x => `<option value="${esc(x)}">`).join('')}</datalist>
-          ${d.columns.some(c => c.type === 'waiting') ? `<p class="muted" style="margin:0;font-size:13px">${pricing(d).perTonne ? `Rate is per tonne, minimum ${pricing(d).minTonnes} t. ` : ''}Demurrage after ${fmtHM(waitParams(d).free)} hr is charged at ${money(waitParams(d).hourly, d.currency)}/hr${waitParams(d).block ? ` in full ${waitParams(d).block}-minute blocks` : ''}.${pricing(d).fuelLevy ? ` Fuel levy ${pricing(d).fuelLevy}% is added on cartage plus demurrage.` : ''}</p>` : ''}
+          ${d.columns.some(c => c.type === 'waiting') ? `<p class="muted" style="margin:0;font-size:13px">${pricing(d).perTonne ? `Rate is per tonne, minimum ${pricing(d).minTonnes} t. ` : ''}Demurrage after ${fmtHM(waitParams(d).free)} hr is charged at ${money(waitParams(d).hourly, d.currency)}/hr${waitParams(d).block ? ` in full ${waitParams(d).block}-minute blocks` : ''}.${pricing(d).fuelLevy ? ` Fuel levy ${pricing(d).fuelLevy}% is added on cartage${d.oversize ? ', oversize' : ''} plus demurrage.` : ''}</p>` : ''}
           <div class="items" id="items">${d.items.length ? d.items.map((r, i) => itemRow(d, r, i)).join('') : `<p class="muted" style="margin:0">No lines yet. Use <b>Add Mon–Sun</b> to start a full week, or <b>Add line</b> for each con note.</p>`}</div>
         </div>
       </section>
@@ -737,6 +740,7 @@ function viewEditor(){
             <label class="f"><span>Due date</span><input class="in" type="date" id="f-dueDate" value="${esc(d.dueDate)}"></label>
           </div>
           <label class="check"><input type="checkbox" id="f-tax" ${d.taxEnabled ? 'checked' : ''}> Add ${esc(d.taxLabel)} (${esc(d.taxRate)}%)</label>
+          <label class="check"><input type="checkbox" id="f-oversize" ${d.oversize ? 'checked' : ''}> Oversize / extendable load (+${esc(pricing(d).oversizePct)}% on cartage)</label>
           <label class="check"><input type="checkbox" id="f-paid" ${d.status === 'paid' ? 'checked' : ''}> Mark as paid</label>
         </div>
       </section>
@@ -766,7 +770,8 @@ function itemRow(d, r, i){
     const type = c.type === 'date' ? 'date' : c.type === 'time' ? 'time' : 'text';
     const im = ['number','weight','money'].includes(c.type) ? 'inputmode="decimal"' : '';
     const list = c.type === 'suburb' ? 'list="suburbList" autocomplete="off"' : '';
-    return `<label class="f ${cls}"><span>${esc(c.label)}</span><input class="in ${im ? 'num' : ''}" type="${type}" ${im} ${list} data-row="${r.id}" data-key="${esc(c.key)}" data-type="${c.type}" value="${esc(v)}"></label>`;
+    const input = `<label class="f ${cls}"><span>${esc(c.label)}</span><input class="in ${im ? 'num' : ''}" type="${type}" ${im} ${list} data-row="${r.id}" data-key="${esc(c.key)}" data-type="${c.type}" value="${esc(v)}"></label>`;
+    return c.type === 'suburb' ? `<div style="display:grid;gap:4px" class="${cls}">${input}<div data-sub-hint="${r.id}">${subHint(r, v)}</div></div>` : input;
   }).join('');
   return `<div class="item" style="--fw:118px">
     <div class="item-fields">${fields}</div>
@@ -774,6 +779,11 @@ function itemRow(d, r, i){
       <button class="iconbtn" title="Copy line" aria-label="Copy line ${i+1}" data-dup-row="${r.id}">${ICON.copy}</button>
       <button class="iconbtn" title="Remove line" aria-label="Remove line ${i+1}" data-del-row="${r.id}">${ICON.x}</button>
     </div></div>`;
+}
+// A suburb that isn't on the rate card yet gets a button to add it with the rate typed on this line.
+function subHint(r, v){
+  if (!String(v||'').trim() || rateFor(v) != null) return '';
+  return `<button class="btn sm ghost" style="font-size:12px;padding:2px 8px;min-height:0" data-add-rc-row="${r.id}">${ICON.plus}Add to rate card</button>`;
 }
 function waitText(d, r){ const w = waitInfo(d, r.values); return w.mins == null ? '—' : w.charge ? `${fmtHM(w.over)} · ${money(w.charge, d.currency)}` : `${fmtHM(w.mins)} · no charge`; }
 function refreshTotals(){
@@ -967,9 +977,9 @@ function viewSettings(){
         <label class="f"><span>Default notes &amp; terms</span><textarea class="in" rows="2" data-set="invoice.notes">${esc(s.invoice.notes)}</textarea></label>
       </div></section>
 
-    <section class="panel"><div class="panel-h"><h2>Rate card</h2><button class="btn sm" data-action="add-rc">${ICON.plus}Add zone</button></div>
+    <section class="panel"><div class="panel-h"><h2>Rate card</h2><button class="btn sm primary" data-action="add-rc">${ICON.plus}Add new suburb rate</button></div>
       <div class="panel-b stack">
-        <p class="muted" style="margin:0;font-size:13.5px">Put several suburbs in one zone by separating them with a slash, e.g. Braeside / Dandenong / Knox. Type a suburb on an invoice line and its rate fills in automatically.</p>
+        <p class="muted" style="margin:0;font-size:13.5px">Tap <b>Add new suburb rate</b>, type the suburb and its rate, then <b>Save settings</b>. Put several suburbs in one zone by separating them with a slash, e.g. Braeside / Dandenong / Knox. Type a suburb on an invoice line and its rate fills in automatically. You can also add a new suburb straight from an invoice line.</p>
         <div class="cols">${(s.rates.card||[]).length ? s.rates.card.map((r, i) => `
           <div class="colrow" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto">
             <input class="in" aria-label="Zone suburbs" placeholder="Suburbs in this zone" data-rc="${i}" data-prop="suburb" value="${esc(r.suburb)}">
@@ -980,13 +990,14 @@ function viewSettings(){
           <label class="f"><span>Rates are</span><select class="in" id="perTonne"><option value="1" ${s.rates.perTonne ? 'selected' : ''}>Per tonne (uses Weight)</option><option value="0" ${s.rates.perTonne ? '' : 'selected'}>Per load</option></select></label>
           <label class="f"><span>Minimum tonnes</span><input class="in" inputmode="decimal" data-set="rates.minTonnes" value="${esc(s.rates.minTonnes)}"></label>
           <label class="f"><span>Fuel levy %</span><input class="in" inputmode="decimal" data-set="rates.fuelLevy" value="${esc(s.rates.fuelLevy)}"></label>
+          <label class="f"><span>Oversize / extendable %</span><input class="in" inputmode="decimal" data-set="rates.oversizePct" value="${esc(s.rates.oversizePct)}"></label>
         </div>
         <div class="grid">
           <label class="f"><span>Demurrage per hour</span><input class="in" inputmode="decimal" data-set="rates.hourly" value="${esc(s.rates.hourly)}"></label>
           <label class="f"><span>Free time (minutes)</span><input class="in" inputmode="numeric" data-set="rates.freeMinutes" value="${esc(s.rates.freeMinutes)}"></label>
           <label class="f"><span>Charge in blocks of (minutes)</span><input class="in" inputmode="numeric" data-set="rates.blockMinutes" value="${esc(s.rates.blockMinutes)}"></label>
         </div>
-        <p class="muted" style="margin:0;font-size:13px">Demurrage is worked out from Time in and Time out on each line. Only completed blocks after the free time are charged. Fuel levy is added on cartage plus demurrage.</p>
+        <p class="muted" style="margin:0;font-size:13px">Demurrage is worked out from Time in and Time out on each line. Only completed blocks after the free time are charged. Oversize / extendable is ticked on each invoice and adds this % to cartage. Fuel levy is added on cartage, oversize and demurrage.</p>
       </div></section>
 
     <section class="panel"><div class="panel-h"><h2>Invoice columns</h2><button class="btn sm" data-action="add-col">${ICON.plus}Add column</button></div>
@@ -1069,6 +1080,15 @@ document.addEventListener('click', async e => {
     const v = {...r.values}; d.columns.forEach(c => { if (c.type === 'date' && v[c.key]) v[c.key] = addDays(v[c.key], 1); });
     d.items.splice(i + 1, 0, {id: uid(), values: v}); rerenderItems(); return; }
   if (ds.colMove) { const s = state.settingsDraft, i = +ds.colMove, j = i + (+ds.dir); [s.columns[i], s.columns[j]] = [s.columns[j], s.columns[i]]; render(); return; }
+  if (ds.addRcRow) { const d = state.draft; const r = d.items.find(x => x.id === ds.addRcRow); if (!r) return;
+    const sc = d.columns.find(c => c.type === 'suburb'), rc = d.columns.find(c => c.type === 'money' && c.multiply);
+    const suburb = String(r.values[sc.key] || '').trim(), rate = rc ? num(r.values[rc.key]) : 0;
+    if (!rate) { toast(`Type the rate for ${suburb} on this line first, then tap Add to rate card.`); return; }
+    const ns = clone(state.settings); ns.rates.card = [...(ns.rates.card || []), {suburb, rate}];
+    if (await safe(Store.putSettings(ns), `${suburb} added to the rate card at ${money(rate, d.currency)}`)) {
+      const dl = $('#suburbList'); if (dl) dl.insertAdjacentHTML('beforeend', `<option value="${esc(suburb)}">`);
+      d.items.forEach(x => { const h = document.querySelector(`[data-sub-hint="${x.id}"]`); if (h) h.innerHTML = subHint(x, x.values[sc.key]); }); }
+    return; }
   if (ds.rcDel) { state.settingsDraft.rates.card.splice(+ds.rcDel, 1); render(); return; }
   if (ds.colDel) { const s = state.settingsDraft; if (s.columns.length <= 1) { toast('Keep at least one column.'); return; } s.columns.splice(+ds.colDel, 1); render(); return; }
 
@@ -1094,7 +1114,7 @@ document.addEventListener('click', async e => {
     case 'modal-ok': { const fn = state.modal?.fn; closeModal(); if (fn) fn(); break; }
     case 'save-settings': { const s = state.settingsDraft; s.invoice.nextNumber = Math.max(1, parseInt(s.invoice.nextNumber) || 1); s.invoice.dueDays = Math.max(0, parseInt(s.invoice.dueDays) || 0); s.invoice.taxRate = num(s.invoice.taxRate);
       s.rates.freeMinutes = Math.max(0, parseInt(s.rates.freeMinutes) || 0); s.rates.hourly = num(s.rates.hourly);
-      s.rates.blockMinutes = Math.max(0, parseInt(s.rates.blockMinutes) || 0); s.rates.minTonnes = num(s.rates.minTonnes); s.rates.fuelLevy = num(s.rates.fuelLevy);
+      s.rates.blockMinutes = Math.max(0, parseInt(s.rates.blockMinutes) || 0); s.rates.minTonnes = num(s.rates.minTonnes); s.rates.fuelLevy = num(s.rates.fuelLevy); s.rates.oversizePct = num(s.rates.oversizePct);
       s.rates.card = (s.rates.card || []).filter(r => String(r.suburb).trim()).map(r => ({suburb: String(r.suburb).trim(), rate: num(r.rate)}));
       if (await safe(Store.putSettings(s), 'Settings saved')) { state.settingsDraft = clone(state.settings); render(); } break; }
     case 'logout': if (Store.fbAuth) { await Store.fbAuth.signOut(); break; } await Store.api('POST', '/api/logout').catch(() => {}); state.auth = {setup:false}; render(); break;
@@ -1102,7 +1122,7 @@ document.addEventListener('click', async e => {
       if (!email) { toast('Type your email first.'); break; }
       try { await Store.fbAuth.sendPasswordResetEmail(email); toast('Reset link sent to ' + email); } catch(x) { toast(x.message); } break; }
     case 'retry-load': state.loadError = null; state.ready = false; if (Store.mode === 'server') Store.load(); else location.reload(); break;
-    case 'add-rc': state.settingsDraft.rates.card = state.settingsDraft.rates.card || []; state.settingsDraft.rates.card.push({suburb:'', rate:''}); render(); break;
+    case 'add-rc': state.settingsDraft.rates.card = state.settingsDraft.rates.card || []; state.settingsDraft.rates.card.unshift({suburb:'', rate:''}); render(); $('[data-rc="0"][data-prop="suburb"]')?.focus(); break;
     case 'add-col': state.settingsDraft.columns.push({key: 'c' + uid(), label:'New column', type:'text', width:'normal', multiply:false}); render(); break;
     case 'reset-cols': state.settingsDraft.columns = clone(DEFAULT_COLUMNS); render(); break;
     case 'export': { const data = JSON.stringify({app:'wharf-invoices', version:1, exportedAt:new Date().toISOString(), settings:state.settings, companies:state.companies, invoices:state.invoices}, null, 2);
@@ -1123,11 +1143,12 @@ document.addEventListener('input', e => {
   if (d) {
     if (ds.row) { const r = d.items.find(x => x.id === ds.row); if (!r) return; r.values[ds.key] = t.value;
       if (ds.type === 'suburb') { const rate = rateFor(t.value); const rc = d.columns.find(c => c.type === 'money' && c.multiply);
-        if (rate != null && rc) { r.values[rc.key] = String(rate); const inp = document.querySelector(`[data-row="${r.id}"][data-key="${rc.key}"]`); if (inp) inp.value = rate; } }
+        if (rate != null && rc) { r.values[rc.key] = String(rate); const inp = document.querySelector(`[data-row="${r.id}"][data-key="${rc.key}"]`); if (inp) inp.value = rate; }
+        const h = document.querySelector(`[data-sub-hint="${r.id}"]`); if (h) h.innerHTML = subHint(r, t.value); }
       refreshTotals(); return; }
     if (ds.bill) { d.billTo[ds.bill] = t.value; return; }
     if (t.id === 'notes') { d.notes = t.value; return; }
-    if (t.id && t.id.startsWith('f-') && !['f-tax','f-paid'].includes(t.id)) { d[t.id.slice(2)] = t.value; return; }
+    if (t.id && t.id.startsWith('f-') && !['f-tax','f-paid','f-oversize'].includes(t.id)) { d[t.id.slice(2)] = t.value; return; }
   }
   const s = state.settingsDraft;
   if (s) {
@@ -1140,6 +1161,7 @@ document.addEventListener('change', async e => {
   const t = e.target, ds = t.dataset, d = state.draft, s = state.settingsDraft;
   if (t.id === 'pickCompany' && d) { applyCompany(d, t.value); render(); toast(t.value ? 'Company details copied in' : 'Bill-to cleared'); return; }
   if (t.id === 'f-tax' && d) { d.taxEnabled = t.checked; refreshTotals(); return; }
+  if (t.id === 'f-oversize' && d) { d.oversize = t.checked; refreshTotals(); return; }
   if (t.id === 'f-paid' && d) { d.status = t.checked ? 'paid' : 'unpaid'; return; }
   if (t.id === 'f-date' && d) { d.date = t.value; return; }
   if (s && ds.col !== undefined && ds.prop) {

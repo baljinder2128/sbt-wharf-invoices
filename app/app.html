@@ -1257,6 +1257,11 @@ document.addEventListener('change', async e => {
     try {
       const data = JSON.parse(await t.files[0].text());
       if (data.app !== 'wharf-invoices') throw new Error('That file is not a Wharf Invoices backup.');
+      // An update file only changes the settings it names and adds or updates rate card suburbs; everything else stays.
+      if (data.merge) { const ns = clone(state.settings), u = data.settings || {};
+        ['business','bank','invoice','rates'].forEach(g => { const { card, ...rest } = u[g] || {}; Object.assign(ns[g], rest); });
+        (u.rates?.card || []).forEach(r => { const hit = ns.rates.card.find(x => String(x.suburb).trim().toLowerCase() === String(r.suburb).trim().toLowerCase()); if (hit) hit.rate = r.rate; else ns.rates.card.push(r); });
+        await Store.putSettings(ns); state.settingsDraft = null; toast('Settings updated'); render(); t.value = ''; return; }
       if (data.settings) await Store.putSettings(data.settings);
       for (const c of data.companies || []) await Store.put('companies', c.id || uid(), c);
       for (const i of data.invoices || []) await Store.put('invoices', i.id || uid(), i);

@@ -149,6 +149,9 @@ select.in{appearance:none;background-image:linear-gradient(45deg,transparent 50%
 .irow .no{font-family:var(--f-mono);font-weight:500;font-size:14px}
 .irow .co{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .irow .sub{font-size:12.5px;color:var(--muted)}
+.emailed{color:#1D7A4C;font-weight:600;white-space:nowrap}.emailed svg{width:13px;height:13px;vertical-align:-2px;margin-right:3px}
+.colrow.elog{grid-template-columns:190px 110px minmax(0,1.2fr) minmax(0,1.5fr) auto}
+@media (max-width:760px){.colrow.elog{grid-template-columns:1fr 1fr}.colrow.elog .tools{justify-content:flex-end}}
 .irow .amt{font-family:var(--f-mono);text-align:right;font-variant-numeric:tabular-nums;font-weight:500}
 .ihead{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600;cursor:default;background:var(--surface-2)}
 .ihead:hover{background:var(--surface-2)}
@@ -637,7 +640,7 @@ function viewInvoices(){
       ${list.map(i => { const st = statusOf(i); return `
       <button class="irow" data-open="${esc(i.id)}">
         <span class="no">${esc(i.number)}</span>
-        <span class="c-main" style="min-width:0"><div class="co">${esc(i.billTo?.name || 'No company')}${i.example ? ' <span class="muted" style="font-weight:400">(example)</span>' : ''}</div><div class="sub">Issued ${fmtDate(i.date)}${i.dueDate ? ' · due ' + fmtDate(i.dueDate) : ''}</div></span>
+        <span class="c-main" style="min-width:0"><div class="co">${esc(i.billTo?.name || 'No company')}${i.example ? ' <span class="muted" style="font-weight:400">(example)</span>' : ''}</div><div class="sub">Issued ${fmtDate(i.date)}${i.dueDate ? ' · due ' + fmtDate(i.dueDate) : ''}${(i.emails || []).length ? ` · <span class="emailed">${ICON.mail}Emailed ${fmtDate(String(i.emails[i.emails.length - 1].at).split('T')[0])}</span>` : ''}</div></span>
         <span class="c-week sub num">${fmtDate(i.weekEnding) || '—'}</span>
         <span class="amt">${money(totals(i).total, i.currency)}</span>
         <span class="pillwrap"><span class="pill ${st}">${STATUS_TEXT[st]}</span></span>
@@ -889,7 +892,7 @@ function viewPreview(){
     <button class="btn primary" data-pdf="${esc(inv.id)}">${ICON.pdf}Download PDF</button>
   </div>
   ${inv.example ? `<div class="notice ex" style="margin-bottom:14px">This is an example invoice so you can see the layout. Delete it whenever you like.</div>` : ''}
-  <p class="muted sheet-hint">Swipe sideways to see the whole page. The PDF is laid out on A4.</p><div class="sheet-wrap">${sheetHTML(inv)}</div>`;
+  <p class="muted sheet-hint">Swipe sideways to see the whole page. The PDF is laid out on A4.</p><div class="sheet-wrap">${sheetHTML(inv)}</div>${emailLogHTML(inv)}`;
 }
 function sheetHTML(inv){
   const s = state.settings, biz = s.business, bank = s.bank, t = totals(inv), b = inv.billTo || {};
@@ -998,6 +1001,26 @@ async function downloadPDF(inv){
   }
   saveFile(blob, name);
 }
+// Each invoice keeps a log of the emails made from it. Entries can be edited, added by hand or removed.
+const nowLocal = () => { const d = new Date(); return `${isoToday()}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+function logEmail(inv, e){
+  const cur = state.invoices.find(i => i.id === inv.id) || inv;
+  safe(Store.put('invoices', cur.id, {...cur, emails: [...(cur.emails || []), {id: uid(), at: nowLocal(), note: '', ...e}]})).then(() => { if (state.view === 'preview') render(); });
+}
+function emailLogHTML(inv){
+  const rows = inv.emails || [];
+  const fmtAt = a => { const [d, t] = String(a || '').split('T'); return `${fmtDate(d)}${t ? ' ' + t : ''}`; };
+  return `<section class="panel" style="margin-top:16px"><div class="panel-h"><h2>Email log</h2><button class="btn sm" data-elog-add="${esc(inv.id)}">${ICON.plus}Add entry</button></div>
+    <div class="panel-b stack">${rows.length ? rows.map(e => `
+      <div class="colrow elog">
+        <input class="in" type="datetime-local" aria-label="Sent" data-elog="${esc(inv.id)}" data-eid="${esc(e.id)}" data-prop="at" value="${esc(e.at)}">
+        <select class="in" aria-label="Type" data-elog="${esc(inv.id)}" data-eid="${esc(e.id)}" data-prop="kind">${['Invoice','Review','Reminder','Other'].map(k => `<option ${e.kind === k ? 'selected' : ''}>${k}</option>`).join('')}</select>
+        <input class="in" type="email" aria-label="To" placeholder="To" data-elog="${esc(inv.id)}" data-eid="${esc(e.id)}" data-prop="to" value="${esc(e.to)}">
+        <input class="in" aria-label="Note" placeholder="Note, e.g. resent, paid on…" data-elog="${esc(inv.id)}" data-eid="${esc(e.id)}" data-prop="note" value="${esc(e.note)}">
+        <div class="tools"><button class="iconbtn" aria-label="Remove entry" data-elog-del="${esc(inv.id)}|${esc(e.id)}">${ICON.trash}</button></div>
+      </div>`).join('') : `<p class="muted" style="margin:0">No emails yet. Each time you use Email, it's logged here with the date and address.</p>`}
+    </div></section>`;
+}
 function fillTemplate(str, inv){
   const s = state.settings, b = inv.billTo || {}, t = totals(inv);
   const vals = {number: inv.number, company: b.name || '', contact: b.contact || 'Accounts Team', weekEnding: inv.weekEnding ? fmtDate(inv.weekEnding) : '',
@@ -1036,6 +1059,7 @@ async function sendEmail(inv, kind){
       toast('Could not save the PDF: ' + e.message); return;
     }
     toast(`Email opening. Attach ${name} from the folder you saved it in.`);
+    logEmail(inv, {kind: review ? 'Review' : 'Invoice', to, subject});
     setTimeout(openMail, 400);
   };
   await save();
@@ -1179,6 +1203,10 @@ document.addEventListener('click', async e => {
     delete d.example; delete d.createdAt;
     d.items = d.items.map(r => { const v = {...r.values}; d.columns.forEach(c => { if (c.type === 'date' && v[c.key]) v[c.key] = addDays(v[c.key], 7); }); return {id: uid(), values: v}; });
     state.view = 'edit'; state.draft = d; render(); window.scrollTo(0,0); toast('Copied with dates moved forward one week'); return; }
+  if (ds.elogAdd) { const inv = state.invoices.find(i => i.id === ds.elogAdd); if (!inv) return;
+    const to = inv.billTo?.email || ''; await safe(Store.put('invoices', inv.id, {...inv, emails: [...(inv.emails || []), {id: uid(), at: nowLocal(), kind: 'Invoice', to, subject: '', note: ''}]})); render(); return; }
+  if (ds.elogDel) { const [iid, eid] = ds.elogDel.split('|'); const inv = state.invoices.find(i => i.id === iid); if (!inv) return;
+    await safe(Store.put('invoices', inv.id, {...inv, emails: (inv.emails || []).filter(e => e.id !== eid)}), 'Entry removed'); render(); return; }
   if (ds.togglePaid) { const inv = state.invoices.find(i => i.id === ds.togglePaid); if (!inv) return;
     await safe(Store.put('invoices', inv.id, {...inv, status: inv.status === 'paid' ? 'unpaid' : 'paid'}), inv.status === 'paid' ? 'Marked unpaid' : 'Marked paid'); render(); return; }
   if (ds.delInv) { const inv = state.invoices.find(i => i.id === ds.delInv);
@@ -1286,6 +1314,9 @@ document.addEventListener('input', e => {
 });
 document.addEventListener('change', async e => {
   const t = e.target, ds = t.dataset, d = state.draft, s = state.settingsDraft;
+  if (ds.elog) { const inv = state.invoices.find(i => i.id === ds.elog); if (!inv) return;
+    const emails = (inv.emails || []).map(x => x.id === ds.eid ? {...x, [ds.prop]: t.value} : x);
+    await safe(Store.put('invoices', inv.id, {...inv, emails}), 'Email log saved'); return; }
   if (t.id === 'pickCompany' && d) { applyCompany(d, t.value); render(); toast(t.value ? 'Company details copied in' : 'Bill-to cleared'); return; }
   if (t.id === 'f-tax' && d) { d.taxEnabled = t.checked; refreshTotals(); return; }
   if (ds.overRow && d) { const r = d.items.find(x => x.id === ds.overRow); if (r) { r.oversize = t.checked; t.closest('.item')?.classList.toggle('over', t.checked); refreshTotals(); } return; }

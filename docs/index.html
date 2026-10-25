@@ -198,6 +198,9 @@ select.in{appearance:none;background-image:linear-gradient(45deg,transparent 50%
 .item-tools{display:flex;flex-direction:column;gap:2px}
 .item-head{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
 .pill.load{background:var(--primary);color:var(--on-primary)}
+.pill.load[data-n="2"]{background:#2E75B6;color:#fff}
+.pill.load[data-n="3"]{background:#1D7A4C;color:#fff}
+.pill.load[data-n="4"]{background:#C26A00;color:#fff}
 .item-head .btn{font-size:12.5px}
 .over-tick{font-size:13px;font-weight:600}
 .item.over{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
@@ -543,13 +546,13 @@ function loadNo(inv, row){
 function outCols(inv){
   let cols = inv.columns || state.settings.columns; const i = cols.findIndex(c => c.type === 'date');
   if (i >= 0 && (inv.items || []).some(r => loadNo(inv, r) > 1)) cols = [...cols.slice(0, i + 1), {key:'__load', label:'Load', type:'load', width:'narrow'}, ...cols.slice(i + 1)];
-  if ((inv.items || []).some(r => r.oversize)) { const a = cols.findIndex(c => c.type === 'amount'), os = {key:'__over', label:'Oversize', type:'over', width:'narrow'};
+  if ((inv.items || []).some(r => r.oversize)) { const a = cols.findIndex(c => c.type === 'amount'), os = {key:'__over', label:`Oversize +${pricing(inv).oversizePct}%`, type:'over', width:'normal'};
     cols = a < 0 ? [...cols, os] : [...cols.slice(0, a), os, ...cols.slice(a)]; }
   return cols;
 }
 function cellText(col, row, inv){
   if (col.type === 'load') { const n = loadNo(inv, row); return n ? String(n) : ''; }
-  if (col.type === 'over') { const o = rowOver(inv, row); return row.oversize ? `+${pricing(inv).oversizePct}%\n${money(o, inv.currency)}` : ''; }
+  if (col.type === 'over') { const o = rowOver(inv, row); return row.oversize ? money(o, inv.currency) : ''; }
   const v = (row.values || {})[col.key];
   if (col.type === 'amount') return money(rowAmount(inv, row.values || {}, row), inv.currency);
   if (col.type === 'waiting') { const w = waitInfo(inv, row.values || {}); return w.charge ? `${fmtHM(w.over)} hr\n${money(w.charge, inv.currency)}` : ''; }
@@ -747,12 +750,12 @@ function viewEditor(){
 
       <section class="panel">
         <div class="panel-h"><h2>Work this week</h2>
-          <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-action="fill-week">${ICON.cal}Add Mon–Sun</button><button class="btn sm" data-action="add-row">${ICON.plus}Add line</button></div></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-action="fill-week">${ICON.cal}Add Mon–Fri</button><button class="btn sm" data-action="add-row">${ICON.plus}Add line</button></div></div>
         <div class="panel-b stack">
           ${colsDiffer ? `<div class="notice" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>This invoice uses an older column layout.</span><button class="btn sm" data-action="use-current-cols">Switch to current columns</button></div>` : ''}
           <datalist id="suburbList">${[...new Set((state.settings.rates.card||[]).flatMap(r => zoneSuburbs(r.suburb)))].map(x => `<option value="${esc(x)}">`).join('')}</datalist>
           ${d.columns.some(c => c.type === 'waiting') ? `<p class="muted" style="margin:0;font-size:13px">${pricing(d).perTonne ? `Rate is per tonne, minimum ${pricing(d).minTonnes} t. ` : ''}Demurrage after ${fmtHM(waitParams(d).free)} hr is charged at ${money(waitParams(d).hourly, d.currency)}/hr${waitParams(d).block ? ` in full ${waitParams(d).block}-minute blocks` : ''}.${pricing(d).fuelLevy ? ` Tick Oversize / extendable on a load to add ${pricing(d).oversizePct}% to its cartage.${pricing(d).fuelLevy ? ` Fuel levy ${pricing(d).fuelLevy}% is added on cartage, oversize and demurrage.` : ''}` : ''}</p>` : ''}
-          <div class="items" id="items">${d.items.length ? d.items.map((r, i) => itemRow(d, r, i)).join('') : `<p class="muted" style="margin:0">No lines yet. Use <b>Add Mon–Sun</b> to start a full week, or <b>Add line</b> for each con note.</p>`}</div>
+          <div class="items" id="items">${d.items.length ? d.items.map((r, i) => itemRow(d, r, i)).join('') : `<p class="muted" style="margin:0">No lines yet. Use <b>Add Mon–Fri</b> to start a week, or <b>Add line</b> for each con note.</p>`}</div>
         </div>
       </section>
 
@@ -806,7 +809,7 @@ function itemRow(d, r, i){
     return c.type === 'suburb' ? `<div style="display:grid;gap:4px" class="${cls}">${input}<div data-sub-hint="${r.id}">${subHint(r, v)}</div></div>` : input;
   }).join('');
   const hasDate = d.columns.some(c => c.type === 'date'), n = loadNo(d, r);
-  const head = `<div class="item-head"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">${hasDate ? `<span class="pill load" data-load="${r.id}">${n ? `Load ${n}` : 'Load'}</span>` : ''}
+  const head = `<div class="item-head"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">${hasDate ? `<span class="pill load" data-load="${r.id}" data-n="${Math.min(n, 4)}">${n ? `Load ${n}` : 'Load'}</span>` : ''}
       <label class="check over-tick"><input type="checkbox" data-over-row="${r.id}" ${r.oversize ? 'checked' : ''}> Oversize / extendable (+${esc(pricing(d).oversizePct)}%)</label></div>
       ${hasDate ? `<button class="btn sm ghost" data-add-load="${r.id}">${ICON.plus}Add another load this day</button>` : ''}</div>`;
   return `<div class="item${r.oversize ? ' over' : ''}" style="--fw:118px">
@@ -826,13 +829,16 @@ function refreshTotals(){
   const d = state.draft; if (!d) return;
   d.items.forEach(r => { const el = document.querySelector(`[data-amt="${r.id}"]`); if (el) el.textContent = money(rowAmount(d, r.values, r), d.currency);
     const wl = document.querySelector(`[data-wait="${r.id}"]`); if (wl) wl.textContent = waitText(d, r); });
-  d.items.forEach(r => { const el = document.querySelector(`[data-load="${r.id}"]`); if (el) { const n = loadNo(d, r); el.textContent = n ? `Load ${n}` : 'Load'; } });
+  d.items.forEach(r => { const el = document.querySelector(`[data-load="${r.id}"]`); if (el) { const n = loadNo(d, r); el.textContent = n ? `Load ${n}` : 'Load'; el.dataset.n = Math.min(n, 4); } });
   const t = $('#totals'); if (t) t.innerHTML = totalsHTML(d, totals(d));
 }
 async function saveDraft(){
   const d = state.draft;
   if (!d.number.trim()) { toast('Give the invoice a number before saving.'); return null; }
   if (state.invoices.some(i => i.number === d.number.trim() && i.id !== d.id)) { toast(`Invoice ${d.number} already exists. Use a different number.`); return null; }
+  // Lines with nothing filled in apart from the date or rate are left off the invoice.
+  const filled = r => d.columns.some(c => !['date','money','amount','waiting'].includes(c.type) && String(r.values[c.key] ?? '').trim());
+  if (d.items.some(r => !filled(r))) d.items = d.items.filter(filled);
   const isNew = !d.id; const id = d.id || uid();
   const t = totals(d);
   const data = {...clone(d), id, number: d.number.trim(), subtotal: t.subtotal, tax: t.tax, total: t.total, updatedAt: new Date().toISOString()};
@@ -1170,9 +1176,9 @@ document.addEventListener('click', async e => {
       const dateCol = d.columns.find(c => c.type === 'date');
       const have = new Set(dateCol ? d.items.map(r => r.values[dateCol.key]) : []);
       d.items = d.items.filter(r => Object.values(r.values).some(v => String(v).trim()) && !(dateCol && Object.entries(r.values).every(([k,v]) => k === dateCol.key || !String(v).trim()) && !r.values[dateCol.key]));
-      for (let i = 6; i >= 0; i--) { const day = addDays(end, -i); if (!have.has(day)) d.items.push(blankRow(d, day)); }
+      for (let i = 6; i >= 2; i--) { const day = addDays(end, -i); if (!have.has(day)) d.items.push(blankRow(d, day)); }
       if (dateCol) d.items.sort((a,b) => String(a.values[dateCol.key]||'9').localeCompare(String(b.values[dateCol.key]||'9')));
-      rerenderItems(); toast('Added Monday to Sunday. Remove the days you did not work.'); break; }
+      rerenderItems(); toast('Added Monday to Friday. Use Add line for a weekend day. Days left empty are left off the invoice.'); break; }
     case 'use-current-cols': { const d = state.draft; const old = d.columns; d.columns = clone(state.settings.columns);
       d.items = d.items.map(r => { const v = {}; d.columns.forEach(c => { const o = old.find(x => x.key === c.key); v[c.key] = o ? (r.values[c.key] ?? '') : ''; }); return {id:r.id, values:v}; });
       render(); break; }
@@ -1203,7 +1209,7 @@ document.addEventListener('click', async e => {
   }
 });
 function rerenderItems(){ const d = state.draft; const host = $('#items'); if (!host) return;
-  host.innerHTML = d.items.length ? d.items.map((r, i) => itemRow(d, r, i)).join('') : `<p class="muted" style="margin:0">No lines yet. Use <b>Add Mon–Sun</b> to start a full week, or <b>Add line</b> for each con note.</p>`;
+  host.innerHTML = d.items.length ? d.items.map((r, i) => itemRow(d, r, i)).join('') : `<p class="muted" style="margin:0">No lines yet. Use <b>Add Mon–Fri</b> to start a week, or <b>Add line</b> for each con note.</p>`;
   refreshTotals(); }
 
 document.addEventListener('input', e => {

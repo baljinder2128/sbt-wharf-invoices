@@ -771,6 +771,8 @@ function viewEditor(){
         <div class="panel-b totals" id="totals">${totalsHTML(d, t)}</div>
       </section>
       <button class="btn primary" data-action="save-pdf" style="width:100%">${ICON.pdf}Save &amp; download PDF</button>
+      <button class="btn wa" data-action="save-wa" style="width:100%">${ICON.wa}Save &amp; send on WhatsApp</button>
+      <button class="btn" data-action="save-review" style="width:100%">${ICON.mail}Save &amp; email for review</button>
     </aside>
   </div>`;
 }
@@ -1018,8 +1020,8 @@ async function whatsappPDF(inv){
     return;
   }
   saveFile(blob, name);
-  window.open(`https://wa.me/${num}?text=${encodeURIComponent(text)}`, '_blank');
-  toast(`PDF downloaded. Drag ${name} into the WhatsApp chat that opens.`);
+  const w = window.open(`https://wa.me/${num}?text=${encodeURIComponent(text)}`, '_blank');
+  toast(w ? `PDF downloaded. Drag ${name} into the WhatsApp chat that opens.` : 'PDF downloaded. Your browser blocked WhatsApp from opening, so tap the green WhatsApp button once more.');
 }
 // Outside Claude: on iPhone/iPad, hand the file to the share sheet (Save to Files, Mail, Messages); elsewhere download it.
 async function saveFile(blob, name){
@@ -1204,6 +1206,8 @@ document.addEventListener('click', async e => {
       render(); break; }
     case 'save-preview': { const inv = await saveDraft(); if (inv) { toast('Invoice saved'); go('preview', inv.id); } break; }
     case 'save-pdf': { const inv = await saveDraft(); if (inv) { go('preview', inv.id); downloadPDF(inv); } break; }
+    case 'save-wa': { const inv = await saveDraft(); if (inv) { go('preview', inv.id); whatsappPDF(inv); } break; }
+    case 'save-review': { const inv = await saveDraft(); if (inv) { go('preview', inv.id); emailReview(inv); } break; }
     case 'add-company': state.modal = {type:'company'}; renderModal(); break;
     case 'add-company-inline': state.modal = {type:'company', inline:true}; renderModal(); break;
     case 'modal-cancel': closeModal(); break;

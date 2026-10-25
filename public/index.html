@@ -318,6 +318,7 @@ const money = (v, s) => { const sym = s ?? (state.settings?.invoice?.currency ??
 
 const LOGO = 'data:image/png;base64,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';
 const ICON = {
+  mail:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
   edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
   trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
   pdf:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
@@ -351,7 +352,7 @@ const DEFAULT_COLUMNS = [
 const DEFAULT_SETTINGS = {
   business:{name:'', abn:'', address:'', phone:'', email:''},
   bank:{accountName:'', bankName:'', bsb:'', accountNumber:''},
-  invoice:{title:'TAX INVOICE', prefix:'INV-', nextNumber:1, dueDays:7, taxEnabled:true, taxLabel:'GST', taxRate:10, currency:'$',
+  invoice:{title:'TAX INVOICE', prefix:'INV-', nextNumber:1, dueDays:7, taxEnabled:true, taxLabel:'GST', taxRate:10, currency:'$', reviewEmail:'sbtruckin@outlook.com',
     notes:'Thank you for your business. Please pay within the terms shown, quoting the invoice number.'},
   rates:{perTonne:true, minTonnes:24, fuelLevy:15, freeMinutes:90, blockMinutes:15, hourly:60, oversizePct:20, card:[]},
   columns: DEFAULT_COLUMNS
@@ -859,6 +860,7 @@ function viewPreview(){
     <button class="btn" data-dup-inv="${esc(inv.id)}">${ICON.copy}Next week</button>
     <button class="btn" data-toggle-paid="${esc(inv.id)}">${ICON.check}${inv.status === 'paid' ? 'Mark unpaid' : 'Mark paid'}</button>
     <button class="btn danger" data-del-inv="${esc(inv.id)}">${ICON.trash}Delete</button>
+    <button class="btn" data-review="${esc(inv.id)}">${ICON.mail}Email for review</button>
     <button class="btn primary" data-pdf="${esc(inv.id)}">${ICON.pdf}Download PDF</button>
   </div>
   ${inv.example ? `<div class="notice ex" style="margin-bottom:14px">This is an example invoice so you can see the layout. Delete it whenever you like.</div>` : ''}
@@ -971,6 +973,29 @@ async function downloadPDF(inv){
   }
   saveFile(blob, name);
 }
+// Sends the invoice PDF to the review address. A web page can't attach files to an email by itself, so:
+// on phones the PDF goes to the share sheet (pick Mail, paste the copied address); on a computer the PDF
+// downloads and an email to the review address opens ready for it to be attached.
+async function emailReview(inv){
+  const to = String(state.settings.invoice.reviewEmail || '').trim();
+  if (!to) { toast('Add a review email in Settings first.'); return; }
+  let blob; try { blob = buildPDF(inv).output('blob'); } catch(e) { toast(e.message); return; }
+  const name = `Invoice ${inv.number} ${inv.billTo?.name || ''}`.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') + '.pdf';
+  const t = totals(inv), subject = `Invoice ${inv.number} for review${inv.billTo?.name ? ' - ' + inv.billTo.name : ''}`;
+  const body = [`Please review invoice ${inv.number}.`, '', `Bill to: ${inv.billTo?.name || '-'}`, inv.weekEnding ? `Week ending: ${fmtDate(inv.weekEnding)}` : '',
+    `Loads: ${(inv.items || []).length}`, `Total: ${money(t.total, inv.currency)}`, '', 'PDF attached.'].filter(x => x !== null).join('\n');
+  const file = new File([blob], name, {type: 'application/pdf'});
+  const mobile = /iPhone|iPad|iPod|Android/.test(navigator.userAgent);
+  if (mobile && navigator.canShare && navigator.canShare({files:[file]})) {
+    try { await navigator.clipboard?.writeText(to); } catch(e) {}
+    toast(`${to} copied. Choose Mail, then paste it in To.`);
+    try { await navigator.share({files:[file], title: subject, text: body}); } catch(e) { if (e?.name !== 'AbortError') toast('Could not open sharing: ' + e.message); }
+    return;
+  }
+  saveFile(blob, name);
+  setTimeout(() => { location.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`; }, 600);
+  toast(`PDF downloaded. Attach ${name} to the email that opens.`);
+}
 // Outside Claude: on iPhone/iPad, hand the file to the share sheet (Save to Files, Mail, Messages); elsewhere download it.
 async function saveFile(blob, name){
   try {
@@ -1005,7 +1030,7 @@ function viewSettings(){
     <section class="panel"><div class="panel-h"><h2>Invoice defaults</h2></div>
       <div class="panel-b stack">
         <div class="grid">${f('invoice','title','Invoice heading')}${f('invoice','prefix','Number prefix')}${f('invoice','nextNumber','Next number','text','inputmode="numeric"')}${f('invoice','dueDays','Payment terms (days)','text','inputmode="numeric"')}</div>
-        <div class="grid">${f('invoice','taxLabel','Tax name')}${f('invoice','taxRate','Tax rate %','text','inputmode="decimal"')}${f('invoice','currency','Currency symbol')}
+        <div class="grid">${f('invoice','taxLabel','Tax name')}${f('invoice','taxRate','Tax rate %','text','inputmode="decimal"')}${f('invoice','currency','Currency symbol')}${f('invoice','reviewEmail','Send for review to','email')}
           <label class="f"><span>Tax on new invoices</span><label class="check" style="min-height:40px"><input type="checkbox" data-set="invoice.taxEnabled" ${s.invoice.taxEnabled ? 'checked' : ''}> Add tax by default</label></label></div>
         <label class="f"><span>Default notes &amp; terms</span><textarea class="in" rows="2" data-set="invoice.notes">${esc(s.invoice.notes)}</textarea></label>
       </div></section>
@@ -1107,6 +1132,7 @@ document.addEventListener('click', async e => {
     await safe(Store.put('invoices', inv.id, {...inv, status: inv.status === 'paid' ? 'unpaid' : 'paid'}), inv.status === 'paid' ? 'Marked unpaid' : 'Marked paid'); render(); return; }
   if (ds.delInv) { const inv = state.invoices.find(i => i.id === ds.delInv);
     confirmBox(`Delete invoice ${inv?.number || ''}?`, 'This removes it for good. Download the PDF first if you need a copy.', 'Delete invoice', async () => { await safe(Store.del('invoices', ds.delInv), 'Invoice deleted'); go('invoices'); }); return; }
+  if (ds.review) { const inv = state.invoices.find(i => i.id === ds.review); if (inv) emailReview(inv); return; }
   if (ds.pdf) { const inv = state.invoices.find(i => i.id === ds.pdf); if (inv) downloadPDF(inv); return; }
   if (ds.delRow) { const d = state.draft; d.items = d.items.filter(r => r.id !== ds.delRow); rerenderItems(); return; }
   if (ds.addLoad) { const d = state.draft; const r = d.items.find(x => x.id === ds.addLoad); if (!r) return;

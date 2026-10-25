@@ -360,7 +360,7 @@ const DEFAULT_COLUMNS = [
 const DEFAULT_SETTINGS = {
   business:{name:'', abn:'', address:'', phone:'', email:''},
   bank:{accountName:'', bankName:'', bsb:'', accountNumber:''},
-  invoice:{title:'TAX INVOICE', prefix:'INV-', nextNumber:1, dueDays:7, taxEnabled:true, taxLabel:'GST', taxRate:10, currency:'$', reviewEmail:'sbtruckin@outlook.com', whatsapp:'',
+  invoice:{title:'TAX INVOICE', prefix:'INV-', nextNumber:1, dueDays:7, taxEnabled:true, taxLabel:'GST', taxRate:10, currency:'$', reviewEmail:'sbtruckin@outlook.com', whatsapp:'0450 045 066',
     notes:'Thank you for your business. Please pay within the terms shown, quoting the invoice number.'},
   rates:{perTonne:true, minTonnes:24, fuelLevy:15, freeMinutes:90, blockMinutes:15, hourly:60, oversizePct:20, card:[]},
   columns: DEFAULT_COLUMNS
@@ -1014,7 +1014,7 @@ async function whatsappPDF(inv){
   let blob; try { blob = buildPDF(inv).output('blob'); } catch(e) { toast(e.message); return; }
   const name = `Invoice ${inv.number} ${inv.billTo?.name || ''}`.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') + '.pdf';
   const t = totals(inv), text = `Invoice ${inv.number}${inv.billTo?.name ? ' - ' + inv.billTo.name : ''}${inv.weekEnding ? ', week ending ' + fmtDate(inv.weekEnding) : ''}. Total ${money(t.total, inv.currency)}. PDF attached.`;
-  let num = String(state.settings.invoice.whatsapp || '').replace(/\D/g, ''); if (num.startsWith('0')) num = '61' + num.slice(1);
+  let num = String(state.settings.invoice.whatsapp || state.settings.business.phone || '').replace(/\D/g, ''); if (num.startsWith('0')) num = '61' + num.slice(1);
   const file = new File([blob], name, {type: 'application/pdf'});
   if (/iPhone|iPad|iPod|Android/.test(navigator.userAgent) && navigator.canShare && navigator.canShare({files:[file]})) {
     toast('Choose WhatsApp, then pick the chat.');
@@ -1059,7 +1059,7 @@ function viewSettings(){
     <section class="panel"><div class="panel-h"><h2>Invoice defaults</h2></div>
       <div class="panel-b stack">
         <div class="grid">${f('invoice','title','Invoice heading')}${f('invoice','prefix','Number prefix')}${f('invoice','nextNumber','Next number','text','inputmode="numeric"')}${f('invoice','dueDays','Payment terms (days)','text','inputmode="numeric"')}</div>
-        <div class="grid">${f('invoice','taxLabel','Tax name')}${f('invoice','taxRate','Tax rate %','text','inputmode="decimal"')}${f('invoice','currency','Currency symbol')}${f('invoice','reviewEmail','Send for review to','email')}${f('invoice','whatsapp','WhatsApp number','tel','placeholder="04xx xxx xxx"')}
+        <div class="grid">${f('invoice','taxLabel','Tax name')}${f('invoice','taxRate','Tax rate %','text','inputmode="decimal"')}${f('invoice','currency','Currency symbol')}${f('invoice','reviewEmail','Send for review to','email')}${f('invoice','whatsapp','WhatsApp number','tel','placeholder="Uses business phone if empty"')}
           <label class="f"><span>Tax on new invoices</span><label class="check" style="min-height:40px"><input type="checkbox" data-set="invoice.taxEnabled" ${s.invoice.taxEnabled ? 'checked' : ''}> Add tax by default</label></label></div>
         <label class="f"><span>Default notes &amp; terms</span><textarea class="in" rows="2" data-set="invoice.notes">${esc(s.invoice.notes)}</textarea></label>
       </div></section>

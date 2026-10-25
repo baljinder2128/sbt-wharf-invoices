@@ -14,7 +14,27 @@ It runs as a website on any computer, and on iPhone it installs to the home scre
 - **PDF:** A4 tax invoice with the SB logo, bill-to details, the lines, cartage, demurrage, fuel levy, GST and total, and your bank details.
 - **Backup (Settings):** download everything as one file, and restore it on this or another copy of the app.
 
-## Run it
+## Free hosting: GitHub Pages + Firebase (recommended)
+
+The `docs/` folder is the app as a plain web page. GitHub Pages hosts it for free, and Firebase (free Spark plan, no expiry) stores the data and handles the login.
+
+1. **Firebase:** create a project at console.firebase.google.com. Turn on **Authentication → Email/Password** and add your login under **Users**. Create a **Firestore Database** (production mode, australia-southeast1). Paste `firestore.rules` into **Firestore → Rules** with your login email filled in, and Publish.
+2. **Config:** in **Project settings → Your apps**, add a Web app and copy its `firebaseConfig` values into `docs/config.js` as `window.WHARF_FIREBASE = { ... }`.
+3. **GitHub Pages:** repo **Settings → Pages → Deploy from a branch → main → /docs**. The app is at `https://<your-user>.github.io/sbt-wharf-invoices/`.
+
+Until `docs/config.js` is filled in, the Pages version saves to the browser only.
+
+To stop anyone else making a Firebase login, turn off **Authentication → Settings → User actions → Enable create (sign-up)**. The rules already block other logins from the data.
+
+## Changing the app
+
+The app itself is `app/app.html`. After editing it, run `npm run build` to update `docs/index.html` and `public/index.html`, then commit all three.
+
+## Server version (optional)
+
+The same app can instead run on its own Node server with its data in SQLite (needs a host such as Railway).
+
+### Run it
 
 Needs Node.js 22.13 or newer.
 
@@ -29,7 +49,7 @@ Tests: `npm test`
 
 All data lives in one SQLite file in `./data` (or `DATA_DIR`). Back that folder up, or use Settings → Download backup.
 
-## Putting it online (Railway)
+### Putting it online (Railway)
 
 1. Sign in at railway.com with GitHub, **New Project → Deploy from GitHub repo → sbt-wharf-invoices**. It builds from the `Dockerfile`.
 2. Right-click the service box on the canvas → **Attach volume** → mount path `/data`. This keeps your invoices across restarts and deploys.

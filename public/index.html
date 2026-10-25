@@ -13,7 +13,8 @@
 <style>:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
 <script>window.WHARF_SERVER = true;</script>
 <title>SB Truckin · Wharf Invoices</title>
-<meta name="apple-mobile-web-app-title" content="SBT Invoices">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Wharf Invoices">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&display=swap">
 <style>
@@ -365,18 +366,13 @@ const Store = {
   db:null, mode:'loading', local:{settings:null, companies:{}, invoices:{}},
   async init(){
     if (window.WHARF_SERVER) { this.mode = 'server'; this.syncLabel(); await this.load(); return; }
+    if (window.WHARF_FIREBASE) { this.initFirebase(window.WHARF_FIREBASE); return; }
     let db = null;
     for (let i = 0; i < 8 && !(window.claude && window.claude.use); i++) await new Promise(r => setTimeout(r, 150));
     if (window.claude && window.claude.use) { try { db = await window.claude.use('db'); } catch(e) { db = null; } }
     if (db) {
-      this.db = db; this.mode = 'cloud';
-      const seen = {s:false, c:false, i:false};
-      const ready = () => { if (seen.s && seen.c && seen.i && !state.ready) { state.ready = true; render(); } else if (state.ready) softRender(); };
-      const fail = e => { toast('Could not reach your saved data: ' + (e && e.message || 'unknown error')); };
-      db.doc('config/settings').onSnapshot(snap => { state.settings = mergeSettings(snap.exists ? snap.data() : null); seen.s = true; ready(); }, fail);
-      db.collection('companies').onSnapshot(snap => { state.companies = snap.docs.map(d => ({...d.data(), id:d.id})).sort((a,b) => String(a.name).localeCompare(b.name)); seen.c = true; ready(); }, fail);
-      db.collection('invoices').onSnapshot(snap => { state.invoices = snap.docs.map(d => ({...d.data(), id:d.id})); seen.i = true; ready(); }, fail);
-      setTimeout(() => { if (!state.ready) { state.ready = true; render(); } }, 6000);
+      this.mode = 'cloud';
+      this.subscribe(db);
     } else {
       this.mode = 'local';
       try { const raw = localStorage.getItem(LKEY); if (raw) this.local = {...this.local, ...JSON.parse(raw)}; } catch(e) {}
@@ -386,6 +382,33 @@ const Store = {
       state.ready = true; render();
     }
     this.syncLabel();
+  },
+  // Live view of the three record sets. Works with the Claude db and with Firestore, which share this API.
+  subscribe(db){
+    this.db = db;
+    const seen = {s:false, c:false, i:false};
+    const ready = () => { if (seen.s && seen.c && seen.i && !state.ready) { state.ready = true; render(); } else if (state.ready) softRender(); };
+    const fail = e => { toast('Could not reach your saved data: ' + (e && e.message || 'unknown error')); };
+    this.unsubs = [
+      db.doc('config/settings').onSnapshot(snap => { state.settings = mergeSettings(snap.exists ? snap.data() : null); seen.s = true; ready(); }, fail),
+      db.collection('companies').onSnapshot(snap => { state.companies = snap.docs.map(d => ({...d.data(), id:d.id})).sort((a,b) => String(a.name).localeCompare(b.name)); seen.c = true; ready(); }, fail),
+      db.collection('invoices').onSnapshot(snap => { state.invoices = snap.docs.map(d => ({...d.data(), id:d.id})); seen.i = true; ready(); }, fail)
+    ];
+    setTimeout(() => { if (!state.ready) { state.ready = true; render(); } }, 6000);
+  },
+  initFirebase(cfg){
+    this.mode = 'cloud'; this.syncLabel();
+    if (!window.firebase) { state.loadError = 'The sign-in service did not load'; state.ready = true; render(); return; }
+    firebase.initializeApp(cfg);
+    this.fbAuth = firebase.auth();
+    const fs = firebase.firestore();
+    try { fs.enablePersistence({synchronizeTabs: true}).catch(() => {}); } catch(e) {}
+    this.fbAuth.onAuthStateChanged(u => {
+      (this.unsubs || []).forEach(f => f()); this.unsubs = [];
+      if (!u) { state.auth = {firebase: true}; state.ready = true; render(); return; }
+      state.auth = null; state.ready = false; render();
+      this.subscribe(fs);
+    });
   },
   syncLabel(){
     const sy = $('#sync'), shared = this.mode !== 'local';
@@ -512,7 +535,7 @@ function updateHeader(){
 function render(){
   updateHeader();
   const app = $('#app');
-  if (!state.ready) return;
+  if (!state.ready) { if (Store.mode !== 'loading') app.innerHTML = '<div class="loading">Loading your invoices…</div>'; return; }
   if (state.auth) { app.innerHTML = viewLogin(); $('#modal').innerHTML = ''; return; }
   if (state.loadError) { app.innerHTML = `<div class="panel empty" style="margin-top:20px"><h2>Can't reach your invoices</h2><p class="muted" style="margin:0">${esc(state.loadError)}. Check your internet connection.</p><button class="btn primary" data-action="retry-load">Try again</button></div>`; return; }
   const v = state.view;
@@ -532,6 +555,7 @@ function viewLogin(){
       <label class="f"><span>Password${setup ? ' (at least 8 characters)' : ''}</span><input class="in" id="au-pass" type="password" autocomplete="${setup ? 'new-password' : 'current-password'}" required></label>
       <p class="muted" id="au-err" style="margin:0;color:var(--bad)" hidden></p>
       <button class="btn accent" type="submit">${setup ? 'Create login' : 'Log in'}</button>
+      ${state.auth && state.auth.firebase ? `<button class="btn ghost sm" type="button" data-action="reset-pw">Forgot password? Email me a reset link</button>` : ''}
     </div></form>`;
 }
 
@@ -984,7 +1008,8 @@ function viewSettings(){
         <label class="f"><span>Current password</span><input class="in" id="pw-cur" type="password" autocomplete="current-password" required></label>
         <label class="f"><span>New password</span><input class="in" id="pw-new" type="password" autocomplete="new-password" minlength="8" required></label>
         <div style="display:flex;align-items:flex-end"><button class="btn" type="submit">Change password</button></div>
-      </form></section>` : ''}
+      </form></section>` : Store.fbAuth ? `<section class="panel"><div class="panel-h"><h2>Your login</h2><button class="btn sm" data-action="logout">Log out</button></div>
+      <div class="panel-b" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span class="muted">Logged in as ${esc(Store.fbAuth.currentUser?.email || '')}</span><button class="btn sm" data-action="reset-pw">Email me a password reset link</button></div></section>` : ''}
 
     <section class="panel"><div class="panel-h"><h2>Backup</h2></div>
       <div class="panel-b stack">
@@ -1072,8 +1097,11 @@ document.addEventListener('click', async e => {
       s.rates.blockMinutes = Math.max(0, parseInt(s.rates.blockMinutes) || 0); s.rates.minTonnes = num(s.rates.minTonnes); s.rates.fuelLevy = num(s.rates.fuelLevy);
       s.rates.card = (s.rates.card || []).filter(r => String(r.suburb).trim()).map(r => ({suburb: String(r.suburb).trim(), rate: num(r.rate)}));
       if (await safe(Store.putSettings(s), 'Settings saved')) { state.settingsDraft = clone(state.settings); render(); } break; }
-    case 'logout': await Store.api('POST', '/api/logout').catch(() => {}); state.auth = {setup:false}; render(); break;
-    case 'retry-load': state.loadError = null; state.ready = false; Store.load(); break;
+    case 'logout': if (Store.fbAuth) { await Store.fbAuth.signOut(); break; } await Store.api('POST', '/api/logout').catch(() => {}); state.auth = {setup:false}; render(); break;
+    case 'reset-pw': { const email = ($('#au-email')?.value || Store.fbAuth?.currentUser?.email || '').trim();
+      if (!email) { toast('Type your email first.'); break; }
+      try { await Store.fbAuth.sendPasswordResetEmail(email); toast('Reset link sent to ' + email); } catch(x) { toast(x.message); } break; }
+    case 'retry-load': state.loadError = null; state.ready = false; if (Store.mode === 'server') Store.load(); else location.reload(); break;
     case 'add-rc': state.settingsDraft.rates.card = state.settingsDraft.rates.card || []; state.settingsDraft.rates.card.push({suburb:'', rate:''}); render(); break;
     case 'add-col': state.settingsDraft.columns.push({key: 'c' + uid(), label:'New column', type:'text', width:'normal', multiply:false}); render(); break;
     case 'reset-cols': state.settingsDraft.columns = clone(DEFAULT_COLUMNS); render(); break;
@@ -1139,9 +1167,11 @@ document.addEventListener('submit', async e => {
   if (e.target.id === 'authForm') {
     e.preventDefault();
     const err = $('#au-err'); err.hidden = true;
-    try { await Store.api('POST', state.auth.setup ? '/api/setup' : '/api/login', {email: $('#au-email').value, password: $('#au-pass').value});
+    try {
+      if (state.auth.firebase) { await Store.fbAuth.signInWithEmailAndPassword($('#au-email').value.trim(), $('#au-pass').value); return; }
+      await Store.api('POST', state.auth.setup ? '/api/setup' : '/api/login', {email: $('#au-email').value, password: $('#au-pass').value});
       state.auth = null; state.ready = false; await Store.load(); }
-    catch(x) { const el = $('#au-err'); if (el) { el.textContent = x.message; el.hidden = false; } }
+    catch(x) { const el = $('#au-err'); if (el) { el.textContent = /auth\/(invalid|wrong|user-not-found)/.test(x.code || '') ? 'Wrong email or password' : x.message; el.hidden = false; } }
     return;
   }
   if (e.target.id === 'pwForm') {

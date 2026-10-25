@@ -187,6 +187,10 @@ select.in{appearance:none;background-image:linear-gradient(45deg,transparent 50%
 .pill.load[data-n="4"]{background:#C26A00;color:#fff}
 .item-head .btn{font-size:12.5px}
 .over-tick{font-size:13px;font-weight:600}
+.sugg{position:absolute;left:0;right:0;top:100%;margin-top:3px;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);max-height:260px;overflow:auto;min-width:200px}
+.sugg[hidden]{display:none}
+.sugg button{display:flex;justify-content:space-between;gap:10px;width:100%;background:none;border:0;border-bottom:1px solid var(--line);padding:9px 11px;font:inherit;font-size:14px;color:var(--ink,inherit);text-align:left;cursor:pointer}
+.sugg button:hover,.sugg button:focus{background:var(--surface-2)}
 .btn.wa{background:#25D366;border-color:#25D366;color:#fff}
 .item.over{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
 @media (max-width:560px){.item-fields .w-wide{grid-column:1/-1}}
@@ -788,9 +792,9 @@ function itemRow(d, r, i){
     }
     const type = c.type === 'date' ? 'date' : c.type === 'time' ? 'time' : 'text';
     const im = ['number','weight','money'].includes(c.type) ? 'inputmode="decimal"' : '';
-    const list = c.type === 'suburb' ? 'list="suburbList" autocomplete="off"' : '';
+    const list = c.type === 'suburb' ? 'autocomplete="off" placeholder="Tap to pick"' : '';
     const input = `<label class="f ${cls}"><span>${esc(c.label)}</span><input class="in ${im ? 'num' : ''}" type="${type}" ${im} ${list} data-row="${r.id}" data-key="${esc(c.key)}" data-type="${c.type}" value="${esc(v)}"></label>`;
-    return c.type === 'suburb' ? `<div style="display:grid;gap:4px" class="${cls}">${input}<div data-sub-hint="${r.id}">${subHint(r, v)}</div></div>` : input;
+    return c.type === 'suburb' ? `<div style="display:grid;gap:4px" class="${cls}"><div style="position:relative">${input}<div class="sugg" data-sugg="${r.id}" hidden></div></div><div data-sub-hint="${r.id}">${subHint(r, v)}</div></div>` : input;
   }).join('');
   const hasDate = d.columns.some(c => c.type === 'date'), n = loadNo(d, r);
   const head = `<div class="item-head"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">${hasDate ? `<span class="pill load" data-load="${r.id}" data-n="${Math.min(n, 4)}">${n ? `Load ${n}` : 'Load'}</span>` : ''}
@@ -802,6 +806,16 @@ function itemRow(d, r, i){
       <button class="iconbtn" title="Copy line" aria-label="Copy line ${i+1}" data-dup-row="${r.id}">${ICON.copy}</button>
       <button class="iconbtn" title="Remove line" aria-label="Remove line ${i+1}" data-del-row="${r.id}">${ICON.x}</button>
     </div></div>`;
+}
+// Pick list for the Suburb box: every suburb on the rate card with its rate, narrowed by what's typed.
+function showSugg(inp){
+  const box = document.querySelector(`[data-sugg="${inp.dataset.row}"]`); if (!box) return;
+  const q = inp.value.trim().toLowerCase();
+  const all = (state.settings.rates.card || []).flatMap(r => zoneSuburbs(r.suburb).map(name => ({name, rate: r.rate})));
+  const list = all.filter(x => !q || x.name.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name));
+  if (!list.length || (list.length === 1 && list[0].name.toLowerCase() === q)) { box.hidden = true; return; }
+  box.innerHTML = list.map(x => `<button type="button" data-pick-sub="${esc(x.name)}" data-pick-row="${inp.dataset.row}"><span>${esc(x.name)}</span><span class="num muted">${money(num(x.rate), state.draft?.currency || '$')}</span></button>`).join('');
+  box.hidden = false;
 }
 // A suburb that isn't on the rate card yet gets a button to add it with the rate typed on this line.
 function subHint(r, v){
@@ -1159,6 +1173,9 @@ document.addEventListener('click', async e => {
     const v = {...r.values}; d.columns.forEach(c => { if (c.type === 'date' && v[c.key]) v[c.key] = addDays(v[c.key], 1); });
     d.items.splice(i + 1, 0, {id: uid(), values: v, oversize: !!r.oversize}); rerenderItems(); return; }
   if (ds.colMove) { const s = state.settingsDraft, i = +ds.colMove, j = i + (+ds.dir); [s.columns[i], s.columns[j]] = [s.columns[j], s.columns[i]]; render(); return; }
+  if (ds.pickSub !== undefined) { const inp = document.querySelector(`[data-row="${ds.pickRow}"][data-type="suburb"]`);
+    if (inp) { inp.value = ds.pickSub; inp.dispatchEvent(new Event('input', {bubbles: true})); }
+    const box = document.querySelector(`[data-sugg="${ds.pickRow}"]`); if (box) box.hidden = true; return; }
   if (ds.addRcRow) { const d = state.draft; const r = d.items.find(x => x.id === ds.addRcRow); if (!r) return;
     const sc = d.columns.find(c => c.type === 'suburb'), rc = d.columns.find(c => c.type === 'money' && c.multiply);
     const suburb = String(r.values[sc.key] || '').trim(), rate = rc ? num(r.values[rc.key]) : 0;
@@ -1215,6 +1232,9 @@ function rerenderItems(){ const d = state.draft; const host = $('#items'); if (!
   host.innerHTML = d.items.length ? d.items.map((r, i) => itemRow(d, r, i)).join('') : `<p class="muted" style="margin:0">No lines yet. Use <b>Add Mon–Fri</b> to start a week, or <b>Add line</b> for each con note.</p>`;
   refreshTotals(); }
 
+document.addEventListener('focusin', e => { if (e.target.dataset?.type === 'suburb') showSugg(e.target); });
+document.addEventListener('focusout', e => { if (e.target.dataset?.type === 'suburb') { const box = document.querySelector(`[data-sugg="${e.target.dataset.row}"]`); setTimeout(() => { if (box) box.hidden = true; }, 300); } });
+document.addEventListener('mousedown', e => { if (e.target.closest('.sugg')) e.preventDefault(); });
 document.addEventListener('input', e => {
   const t = e.target, ds = t.dataset;
   if (t.id === 'q') { state.q = t.value; const pos = t.selectionStart; render(); const q = $('#q'); q.focus(); try { q.setSelectionRange(pos, pos); } catch(_) {} return; }
@@ -1223,7 +1243,7 @@ document.addEventListener('input', e => {
     if (ds.row) { const r = d.items.find(x => x.id === ds.row); if (!r) return; r.values[ds.key] = t.value;
       if (ds.type === 'suburb') { const rate = rateFor(t.value); const rc = d.columns.find(c => c.type === 'money' && c.multiply);
         if (rate != null && rc) { r.values[rc.key] = String(rate); const inp = document.querySelector(`[data-row="${r.id}"][data-key="${rc.key}"]`); if (inp) inp.value = rate; }
-        const h = document.querySelector(`[data-sub-hint="${r.id}"]`); if (h) h.innerHTML = subHint(r, t.value); }
+        const h = document.querySelector(`[data-sub-hint="${r.id}"]`); if (h) h.innerHTML = subHint(r, t.value); showSugg(t); }
       refreshTotals(); return; }
     if (ds.bill) { d.billTo[ds.bill] = t.value; return; }
     if (t.id === 'notes') { d.notes = t.value; return; }

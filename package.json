@@ -1,0 +1,19 @@
+{
+  "name": "sbt-wharf-invoices",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SB Truckin wharf invoices: weekly cartage invoices with rate card, demurrage and fuel levy (web + iPhone PWA)",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env --disable-warning=ExperimentalWarning server/index.js",
+    "test": "node --disable-warning=ExperimentalWarning --test"
+  },
+  "engines": { "node": ">=22.13" },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.3.0",
+    "jsonwebtoken": "^9.0.3"
+  }
+}

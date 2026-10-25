@@ -1024,18 +1024,19 @@ async function emailReview(inv){
   setTimeout(() => { location.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`; }, 600);
   toast(`PDF downloaded. Attach ${name} to the email that opens.`);
 }
-// WhatsApp links can carry text but not files: on phones the PDF goes to the share sheet (pick WhatsApp);
-// on a computer the PDF downloads and a WhatsApp chat with the saved number opens for it to be dropped in.
+// WhatsApp links can carry text but not files, so the PDF goes through the device's share window where it can
+// (pick WhatsApp there); otherwise it downloads and a WhatsApp chat with the saved number opens for it to be dropped in.
 async function whatsappPDF(inv){
   let blob; try { blob = buildPDF(inv).output('blob'); } catch(e) { toast(e.message); return; }
   const name = `Invoice ${inv.number} ${inv.billTo?.name || ''}`.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') + '.pdf';
   const t = totals(inv), text = `Invoice ${inv.number}${inv.billTo?.name ? ' - ' + inv.billTo.name : ''}${inv.weekEnding ? ', week ending ' + fmtDate(inv.weekEnding) : ''}. Total ${money(t.total, inv.currency)}. PDF attached.`;
   let num = String(state.settings.invoice.whatsapp || state.settings.business.phone || '').replace(/\D/g, ''); if (num.startsWith('0')) num = '61' + num.slice(1);
   const file = new File([blob], name, {type: 'application/pdf'});
-  if (/iPhone|iPad|iPod|Android/.test(navigator.userAgent) && navigator.canShare && navigator.canShare({files:[file]})) {
-    toast('Choose WhatsApp, then pick the chat.');
-    try { await navigator.share({files:[file], text}); } catch(e) { if (e?.name !== 'AbortError') toast('Could not open sharing: ' + e.message); }
-    return;
+  // iPhone, Android and Windows (Edge/Chrome) can hand the PDF itself to WhatsApp through the share window.
+  if (navigator.canShare && navigator.canShare({files:[file]})) {
+    try { await navigator.share({files:[file], text}); return; }
+    catch(e) { if (e?.name === 'AbortError') return;
+      if (e?.name === 'NotAllowedError') { toast('Tap the green WhatsApp button once more to share the PDF.'); return; } }
   }
   saveFile(blob, name);
   const w = window.open(`https://wa.me/${num}?text=${encodeURIComponent(text)}`, '_blank');

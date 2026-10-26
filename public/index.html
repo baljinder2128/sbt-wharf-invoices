@@ -765,8 +765,8 @@ function companyForm(c){
 // One-off setup of the SidXpress and NJW numbers and NJW's rates, so they apply without loading a file.
 // Each company is marked once done, so later edits in Companies are kept.
 const COMPANY_SETUP = [
-  {test: /sid\s*x/i, prefix: 'SBT-SID-'},
-  {test: /nj\s*w/i, prefix: 'SBT-NJW-', rates: {card:[{suburb:'Dandenong', rate:23.5}], freeMinutes:60, hourly:60, fuelLevy:0}}];
+  {test: /sid\s*x/i, prefix: 'SBT-SID-', label: 'SidXpress'},
+  {test: /nj\s*w/i, prefix: 'SBT-NJW-', label: 'NJW Transport', rates: {card:[{suburb:'Dandenong', rate:23.5}], freeMinutes:60, hourly:60, fuelLevy:0}}];
 const OLD_NOTE = 'Thank you for your business. Please pay within the terms shown, quoting the invoice number.';
 function setupCompanies(){
   // The old default note becomes the 14-day wording, on settings and on unpaid invoices that still carry it.
@@ -786,16 +786,26 @@ function setupCompanies(){
 
 /* ---------- view: editor ---------- */
 // A company with its own number start (e.g. SBT-SID) gets its own run: SBT-SID001, SBT-SID002, ... Others use the main prefix and counter.
+function numberFor(pre){
+  const used = new Set(state.invoices.map(i => i.number));
+  let max = 0;
+  state.invoices.forEach(i => { const n = String(i.number || ''); if (n.startsWith(pre) && /^\d+$/.test(n.slice(pre.length))) max = Math.max(max, Number(n.slice(pre.length))); });
+  let n = max + 1, number;
+  do { number = pre + String(n).padStart(3, '0'); n++; } while (used.has(number));
+  return number;
+}
+// The number runs to pick from next to the invoice number: each company's own start, plus the main one.
+function numberSeries(){
+  const list = [];
+  state.companies.forEach(c => { const pre = String(c.prefix || '').trim(); if (pre && !list.some(x => x.pre === pre)) list.push({pre, label: c.name}); });
+  COMPANY_SETUP.forEach(x => { if (!list.some(y => y.pre === x.prefix)) list.push({pre: x.prefix, label: x.label}); });
+  return list;
+}
 function nextNumber(companyId){
   const inv = state.settings.invoice, used = new Set(state.invoices.map(i => i.number));
   const c = state.companies.find(x => x.id === companyId), pre = c && String(c.prefix || '').trim();
-  if (pre) {
-    let max = 0;
-    state.invoices.forEach(i => { const n = String(i.number || ''); if (n.startsWith(pre) && /^\d+$/.test(n.slice(pre.length))) max = Math.max(max, Number(n.slice(pre.length))); });
-    let n = max + 1, number;
-    do { number = pre + String(n).padStart(3, '0'); n++; } while (used.has(number));
-    return number;
-  }
+  if (pre) return numberFor(pre);
+  if (numberSeries().some(x => x.pre === inv.prefix)) return numberFor(inv.prefix);
   let n = Math.max(1, Number(inv.nextNumber) || 1), number;
   do { number = inv.prefix + String(n).padStart(4, '0'); n++; } while (used.has(number));
   return number;
@@ -889,6 +899,7 @@ function viewEditor(){
         <div class="panel-h"><h2>Details</h2></div>
         <div class="panel-b stack">
           <label class="f"><span>Invoice number</span><input class="in num" id="f-number" value="${esc(d.number)}"></label>
+          <label class="f"><span>Number series</span><select class="in" id="pickSeries"><option value="">Choose to fill the next number</option>${numberSeries().map(x => `<option value="${esc(x.pre)}" ${d.number.startsWith(x.pre) ? 'selected' : ''}>${esc(x.pre)}000 · ${esc(x.label)}</option>`).join('')}${numberSeries().some(x => x.pre === state.settings.invoice.prefix) ? '' : `<option value="__main">${esc(state.settings.invoice.prefix)} (main)</option>`}</select></label>
           <label class="f"><span>Week ending</span><input class="in" type="date" id="f-weekEnding" value="${esc(d.weekEnding)}"></label>
           <div class="grid" style="grid-template-columns:1fr 1fr">
             <label class="f"><span>Issue date</span><input class="in" type="date" id="f-date" value="${esc(d.date)}"></label>
@@ -1661,6 +1672,10 @@ document.addEventListener('change', async e => {
   if (ds.elog) { const inv = state.invoices.find(i => i.id === ds.elog); if (!inv) return;
     const emails = (inv.emails || []).map(x => x.id === ds.eid ? {...x, [ds.prop]: t.value} : x);
     await safe(Store.put('invoices', inv.id, {...inv, emails}), 'Email log saved'); return; }
+  if (t.id === 'pickSeries' && d) { if (!t.value) return; const inv = state.settings.invoice;
+    d.number = t.value === '__main' ? (() => { const used = new Set(state.invoices.map(i => i.number)); let n = Math.max(1, Number(inv.nextNumber) || 1), x; do { x = inv.prefix + String(n).padStart(4, '0'); n++; } while (used.has(x)); return x; })() : numberFor(t.value);
+    if (d.id && state.invoices.find(i => i.id === d.id)?.number.startsWith(t.value)) d.number = state.invoices.find(i => i.id === d.id).number;
+    d.autoNumber = false; render(); toast('Invoice number ' + d.number); return; }
   if (t.id === 'pickCompany' && d) { applyCompany(d, t.value); render(); toast(t.value ? 'Company details copied in' : 'Bill-to cleared'); return; }
   if (t.id === 'f-tax' && d) { d.taxEnabled = t.checked; refreshTotals(); return; }
   if (ds.overRow && d) { const r = d.items.find(x => x.id === ds.overRow); if (r) { r.oversize = t.checked; t.closest('.item')?.classList.toggle('over', t.checked); refreshTotals(); } return; }

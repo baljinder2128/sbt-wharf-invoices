@@ -190,6 +190,8 @@ select.in{appearance:none;background-image:linear-gradient(45deg,transparent 50%
 .pill.load[data-n="4"]{background:#C26A00;color:#fff}
 .item-head .btn{font-size:12.5px}
 .over-tick{font-size:13px;font-weight:600}
+.corates{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface-2)}
+.corates summary{cursor:pointer}
 .podgrid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
 .podcard{display:grid;grid-template-columns:84px minmax(0,1fr);gap:10px;align-items:start;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
 .podcard.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
@@ -562,9 +564,15 @@ function totalRows(inv, t){
   return r;
 }
 const zoneSuburbs = z => String(z||'').split('/').map(x => x.trim()).filter(Boolean);
-function rateFor(suburb){
+// A company can have its own rates. When it's picked, the invoice copies that company's rate card (rateCard),
+// waiting and pricing; otherwise the main rate card in Settings is used.
+const RATE_KEYS = ['minTonnes','fuelLevy','freeMinutes','hourly','blockMinutes'];
+function companyRates(c){ const r = c && c.rates; if (!r) return null;
+  const has = RATE_KEYS.some(k => r[k] !== '' && r[k] != null) || (r.card || []).length; return has ? r : null; }
+const cardFor = d => (d && d.rateCard) || state.settings.rates.card || [];
+function rateFor(suburb, d = state.draft){
   const k = String(suburb||'').trim().toLowerCase(); if (!k) return null;
-  const hit = (state.settings.rates.card || []).find(r => String(r.suburb).trim().toLowerCase() === k || zoneSuburbs(r.suburb).some(x => x.toLowerCase() === k));
+  const hit = cardFor(d).find(r => String(r.suburb).trim().toLowerCase() === k || zoneSuburbs(r.suburb).some(x => x.toLowerCase() === k));
   return hit ? hit.rate : null;
 }
 function statusOf(inv){
@@ -707,10 +715,16 @@ function viewCompanies(){
         ${c.email ? `<dt>Email</dt><dd>${esc(c.email)}</dd>` : ''}
         ${c.phone ? `<dt>Phone</dt><dd>${esc(c.phone)}</dd>` : ''}
         ${c.defaultRate ? `<dt>Rate</dt><dd class="num">${money(num(c.defaultRate))} per load</dd>` : ''}
+        ${companyRates(c) ? `<dt>Own rates</dt><dd>${esc([((c.rates.card || []).map(r => `${r.suburb} ${money(num(r.rate))}/t`).join(', ')),
+          c.rates.freeMinutes != null ? `waiting after ${c.rates.freeMinutes} min` : '', c.rates.hourly != null ? `${money(num(c.rates.hourly))}/hr` : '',
+          c.rates.fuelLevy != null ? (num(c.rates.fuelLevy) ? `fuel levy ${c.rates.fuelLevy}%` : 'fuel levy included') : ''].filter(Boolean).join(' · '))}</dd>` : ''}
       </dl>
       <div style="margin-top:4px"><button class="btn sm" data-new-for="${esc(c.id)}">${ICON.plus}Invoice this company</button></div>
     </div>`).join('')}</div>`}`;
 }
+const coCardRow = r => `<div class="colrow" style="grid-template-columns:minmax(0,2fr) minmax(0,1fr) auto">
+  <input class="in" placeholder="Suburb(s), e.g. Dandenong" data-corc="s" value="${esc(r.suburb)}"><input class="in num" inputmode="decimal" placeholder="Rate per tonne" data-corc="r" value="${esc(r.rate)}">
+  <div class="tools"><button type="button" class="iconbtn" aria-label="Remove suburb" data-corc-del>${ICON.trash}</button></div></div>`;
 function companyForm(c){
   c = c || {};
   const f = (k, label, type='text', extra='') => `<label class="f"><span>${label}</span><input class="in" id="co-${k}" type="${type}" value="${esc(c[k])}" ${extra}></label>`;
@@ -720,6 +734,14 @@ function companyForm(c){
     <label class="f"><span>Address</span><textarea class="in" id="co-address" rows="3">${esc(c.address)}</textarea></label>
     <div class="grid">${f('email','Email','email')}${f('phone','Phone','tel')}</div>
     <div class="grid">${f('defaultRate','Default rate per load','text','inputmode="decimal" placeholder="e.g. 450.00"')}${f('ref','Reference / PO (optional)')}</div>
+    <details class="corates" ${companyRates(c) ? 'open' : ''}><summary><b>Own rates for this company</b> <span class="muted">(optional, used instead of the main rate card)</span></summary>
+      <div class="stack" style="margin-top:10px">
+        <p class="muted" style="margin:0;font-size:13px">Leave a box empty to use the main setting. Put 0 in Fuel levy if this company's rate already includes it.</p>
+        <div class="grid">${[['minTonnes','Minimum tonnes'],['fuelLevy','Fuel levy %'],['freeMinutes','Free waiting (minutes)'],['hourly','Demurrage per hour'],['blockMinutes','Charge in blocks of (min)']].map(([k, l]) =>
+          `<label class="f"><span>${l}</span><input class="in" inputmode="decimal" id="cor-${k}" placeholder="${esc(state.settings.rates[k])}" value="${esc((c.rates || {})[k] ?? '')}"></label>`).join('')}</div>
+        <div class="cols" id="coCard">${((c.rates || {}).card || []).map(coCardRow).join('')}</div>
+        <div><button type="button" class="btn sm" data-action="co-add-rc">${ICON.plus}Add suburb rate</button></div>
+      </div></details>
   </div>`;
 }
 
@@ -758,6 +780,13 @@ function applyCompany(d, id){
                : {name:'', contact:'', abn:'', address:'', email:'', phone:'', ref:''};
   const rateCol = d.columns.find(col => col.type === 'money' && col.multiply);
   if (c && c.defaultRate && rateCol) d.items.forEach(r => { if (!r.values[rateCol.key]) r.values[rateCol.key] = String(c.defaultRate); });
+  const g = state.settings.rates, own = companyRates(c) || {}, pick = k => (own[k] !== '' && own[k] != null) ? num(own[k]) : num(g[k]);
+  d.waiting = {freeMinutes: pick('freeMinutes'), hourly: pick('hourly'), blockMinutes: pick('blockMinutes')};
+  d.pricing = {...(d.pricing || {}), perTonne: !!g.perTonne, minTonnes: pick('minTonnes'), fuelLevy: pick('fuelLevy'), oversizePct: num(g.oversizePct)};
+  d.rateCard = (own.card || []).length ? clone(own.card) : null;
+  // Re-price loads whose suburb is on the card now in use.
+  const sc = d.columns.find(col => col.type === 'suburb');
+  if (sc && rateCol) d.items.forEach(r => { const rate = rateFor(r.values[sc.key], d); if (rate != null) r.values[rateCol.key] = String(rate); });
 }
 function viewEditor(){
   const d = state.draft; if (!d) return viewInvoices();
@@ -792,7 +821,7 @@ function viewEditor(){
         <div class="panel-b stack">
           ${colsDiffer ? `<div class="notice" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>This invoice uses an older column layout.</span><button class="btn sm" data-action="use-current-cols">Switch to current columns</button></div>` : ''}
           <datalist id="suburbList">${[...new Set((state.settings.rates.card||[]).flatMap(r => zoneSuburbs(r.suburb)))].map(x => `<option value="${esc(x)}">`).join('')}</datalist>
-          ${d.columns.some(c => c.type === 'waiting') ? `<p class="muted" style="margin:0;font-size:13px">${pricing(d).perTonne ? `Rate is per tonne, minimum ${pricing(d).minTonnes} t. ` : ''}Demurrage after ${fmtHM(waitParams(d).free)} hr is charged at ${money(waitParams(d).hourly, d.currency)}/hr${waitParams(d).block ? ` in full ${waitParams(d).block}-minute blocks` : ''}.${pricing(d).fuelLevy ? ` Tick Oversize / extendable on a load to add ${pricing(d).oversizePct}% to its cartage.${pricing(d).fuelLevy ? ` Fuel levy ${pricing(d).fuelLevy}% is added on cartage, oversize and demurrage.` : ''}` : ''}</p>` : ''}
+          ${d.columns.some(c => c.type === 'waiting') ? `<p class="muted" style="margin:0;font-size:13px">${d.rateCard ? `<b>Using ${esc(d.billTo.name)}'s own rates.</b> ` : ''}${pricing(d).perTonne ? `Rate is per tonne, minimum ${pricing(d).minTonnes} t. ` : ''}Demurrage after ${fmtHM(waitParams(d).free)} hr is charged at ${money(waitParams(d).hourly, d.currency)}/hr${waitParams(d).block ? ` in full ${waitParams(d).block}-minute blocks` : ''}.${pricing(d).fuelLevy ? ` Tick Oversize / extendable on a load to add ${pricing(d).oversizePct}% to its cartage.${pricing(d).fuelLevy ? ` Fuel levy ${pricing(d).fuelLevy}% is added on cartage, oversize and demurrage.` : ' No fuel levy is added.'}` : ''}</p>` : ''}
           <div class="items" id="items">${d.items.length ? d.items.map((r, i) => itemRow(d, r, i)).join('') : `<p class="muted" style="margin:0">No lines yet. Use <b>Add Mon–Fri</b> to start a week, or <b>Add line</b> for each con note.</p>`}</div>
         </div>
       </section>
@@ -866,7 +895,7 @@ function itemRow(d, r, i){
 function showSugg(inp){
   const box = document.querySelector(`[data-sugg="${inp.dataset.row}"]`); if (!box) return;
   const q = inp.value.trim().toLowerCase();
-  const all = (state.settings.rates.card || []).flatMap(r => zoneSuburbs(r.suburb).map(name => ({name, rate: r.rate})));
+  const all = cardFor(state.draft).flatMap(r => zoneSuburbs(r.suburb).map(name => ({name, rate: r.rate})));
   const list = all.filter(x => !q || x.name.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name));
   if (!list.length || (list.length === 1 && list[0].name.toLowerCase() === q)) { box.hidden = true; return; }
   box.innerHTML = list.map(x => `<button type="button" data-pick-sub="${esc(x.name)}" data-pick-row="${inp.dataset.row}"><span>${esc(x.name)}</span><span class="num muted">${money(num(x.rate), state.draft?.currency || '$')}</span></button>`).join('');
@@ -954,7 +983,7 @@ async function syncPods(inv){
 }
 function rowFromPod(d, p){ const r = blankRow(d); podCols().forEach(c => { if (p.values && p.values[c.key] != null && p.values[c.key] !== '') r.values[c.key] = p.values[c.key]; });
   const sc = d.columns.find(c => c.type === 'suburb'), rc = d.columns.find(c => c.type === 'money' && c.multiply);
-  if (sc && rc && !r.values[rc.key]) { const rate = rateFor(r.values[sc.key]); if (rate != null) r.values[rc.key] = String(rate); }
+  if (sc && rc && !r.values[rc.key]) { const rate = rateFor(r.values[sc.key], d); if (rate != null) r.values[rc.key] = String(rate); }
   r.podId = p.id; return r; }
 function podLabel(p){ const v = p.values || {}, cn = state.settings.columns.find(c => /con/i.test(c.label)), dc = state.settings.columns.find(c => c.type === 'date');
   return [dc && v[dc.key] ? fmtDate(v[dc.key]) : '', cn && v[cn.key] ? 'Con note ' + v[cn.key] : ''].filter(Boolean).join(' · ') || 'POD ' + String(p.takenAt || '').replace('T', ' '); }
@@ -1431,6 +1460,7 @@ document.addEventListener('click', async e => {
     delete d.emails;
     d.items = d.items.map(r => { const v = {...r.values}; d.columns.forEach(c => { if (c.type === 'date' && v[c.key]) v[c.key] = addDays(v[c.key], 7); }); return {id: uid(), values: v, oversize: !!r.oversize}; });
     state.view = 'edit'; state.draft = d; render(); window.scrollTo(0,0); toast('Copied with dates moved forward one week'); return; }
+  if (ds.corcDel !== undefined) { el.closest('.colrow')?.remove(); return; }
   if (ds.podOpen) { openPodEditor(ds.podOpen); return; }
   if (ds.podTool) { podTool(ds.podTool); return; }
   if (ds.podSave) { savePod(ds.podSave); return; }
@@ -1474,6 +1504,12 @@ document.addEventListener('click', async e => {
     const sc = d.columns.find(c => c.type === 'suburb'), rc = d.columns.find(c => c.type === 'money' && c.multiply);
     const suburb = String(r.values[sc.key] || '').trim(), rate = rc ? num(r.values[rc.key]) : 0;
     if (!rate) { toast(`Type the rate for ${suburb} on this line first, then tap Add to rate card.`); return; }
+    const co = state.companies.find(c => c.id === d.companyId);
+    if (d.rateCard && co) { const nc = clone(co); nc.rates = {...(nc.rates || {}), card: [...((nc.rates || {}).card || []), {suburb, rate}]};
+      d.rateCard = clone(nc.rates.card);
+      if (await safe(Store.put('companies', co.id, nc), `${suburb} added to ${co.name}'s rates at ${money(rate, d.currency)}`))
+        d.items.forEach(x => { const h = document.querySelector(`[data-sub-hint="${x.id}"]`); if (h) h.innerHTML = subHint(x, x.values[sc.key]); });
+      return; }
     const ns = clone(state.settings); ns.rates.card = [...(ns.rates.card || []), {suburb, rate}];
     if (await safe(Store.putSettings(ns), `${suburb} added to the rate card at ${money(rate, d.currency)}`)) {
       const dl = $('#suburbList'); if (dl) dl.insertAdjacentHTML('beforeend', `<option value="${esc(suburb)}">`);
@@ -1483,6 +1519,7 @@ document.addEventListener('click', async e => {
   if (ds.colDel) { const s = state.settingsDraft; if (s.columns.length <= 1) { toast('Keep at least one column.'); return; } s.columns.splice(+ds.colDel, 1); render(); return; }
 
   switch (ds.action) {
+    case 'co-add-rc': $('#coCard')?.insertAdjacentHTML('beforeend', coCardRow({suburb:'', rate:''})); $('#coCard .colrow:last-child input')?.focus(); break;
     case 'pods-new-inv': startInvoiceFromPods([...state.podSel]); break;
     case 'pods-clear': state.podSel = []; render(); break;
     case 'pick-pods': state.modal = {type:'podpick', pick: []}; renderModal(); break;
@@ -1603,7 +1640,13 @@ document.addEventListener('change', async e => {
       if (data.merge) { const ns = clone(state.settings), u = data.settings || {};
         ['business','bank','invoice','rates'].forEach(g => { const { card, ...rest } = u[g] || {}; Object.assign(ns[g], rest); });
         (u.rates?.card || []).forEach(r => { const hit = ns.rates.card.find(x => String(x.suburb).trim().toLowerCase() === String(r.suburb).trim().toLowerCase()); if (hit) hit.rate = r.rate; else ns.rates.card.push(r); });
-        await Store.putSettings(ns); state.settingsDraft = null; toast('Settings updated'); render(); t.value = ''; return; }
+        if (data.settings) await Store.putSettings(ns);
+        // Companies: matched by name (or the 'match' text), their details and own rates updated; new ones added.
+        for (const c of data.companies || []) { const key = String(c.match || c.name || '').toLowerCase(); const { match, ...rest } = c;
+          const hit = state.companies.find(x => String(x.name).toLowerCase().includes(key));
+          if (hit) await Store.put('companies', hit.id, {...hit, ...Object.fromEntries(Object.entries(rest).filter(([k]) => k !== 'name' || !hit.name))});
+          else await Store.put('companies', uid(), rest); }
+        state.settingsDraft = null; toast(data.companies?.length ? 'Updated' : 'Settings updated'); render(); t.value = ''; return; }
       if (data.settings) await Store.putSettings(data.settings);
       for (const c of data.companies || []) await Store.put('companies', c.id || uid(), c);
       for (const i of data.invoices || []) await Store.put('invoices', i.id || uid(), i);
@@ -1631,6 +1674,9 @@ document.addEventListener('submit', async e => {
   e.preventDefault();
   const m = state.modal; const get = k => ($('#co-' + k)?.value || '').trim();
   const data = {name:get('name'), contact:get('contact'), abn:get('abn'), address:$('#co-address').value.trim(), email:get('email'), phone:get('phone'), defaultRate:get('defaultRate'), ref:get('ref')};
+  const rates = {card: [...document.querySelectorAll('#coCard .colrow')].map(row => ({suburb: row.querySelector('[data-corc="s"]').value.trim(), rate: num(row.querySelector('[data-corc="r"]').value)})).filter(r => r.suburb)};
+  RATE_KEYS.forEach(k => { const v = ($('#cor-' + k)?.value || '').trim(); if (v !== '') rates[k] = num(v); });
+  data.rates = companyRates({rates}) ? rates : null;
   if (!data.name) { toast('Enter the company name.'); return; }
   const id = m.id || uid();
   closeModal();

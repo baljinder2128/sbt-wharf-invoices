@@ -729,6 +729,7 @@ function viewCompanies(){
         ${c.address ? `<dt>Address</dt><dd>${esc(c.address)}</dd>` : ''}
         ${c.email ? `<dt>Email</dt><dd>${esc(c.email)}</dd>` : ''}
         ${c.phone ? `<dt>Phone</dt><dd>${esc(c.phone)}</dd>` : ''}
+        ${c.prefix ? `<dt>Invoices</dt><dd class="num">${esc(c.prefix)}001, ${esc(c.prefix)}002 ...</dd>` : ''}
         ${c.defaultRate ? `<dt>Rate</dt><dd class="num">${money(num(c.defaultRate))} per load</dd>` : ''}
         ${companyRates(c) ? `<dt>Own rates</dt><dd>${esc([((c.rates.card || []).map(r => `${r.suburb} ${money(num(r.rate))}/t`).join(', ')),
           c.rates.freeMinutes != null ? `waiting after ${c.rates.freeMinutes} min` : '', c.rates.hourly != null ? `${money(num(c.rates.hourly))}/hr` : '',
@@ -749,6 +750,7 @@ function companyForm(c){
     <label class="f"><span>Address</span><textarea class="in" id="co-address" rows="3">${esc(c.address)}</textarea></label>
     <div class="grid">${f('email','Email','email')}${f('phone','Phone','tel')}</div>
     <div class="grid">${f('defaultRate','Default rate per load','text','inputmode="decimal" placeholder="e.g. 450.00"')}${f('ref','Reference / PO (optional)')}</div>
+    <label class="f"><span>Invoice numbers start with (optional)</span><input class="in" id="co-prefix" value="${esc(c.prefix)}" placeholder="e.g. SBT-SID- gives SBT-SID-001, SBT-SID-002"></label>
     <details class="corates" ${companyRates(c) ? 'open' : ''}><summary><b>Own rates for this company</b> <span class="muted">(optional, used instead of the main rate card)</span></summary>
       <div class="stack" style="margin-top:10px">
         <p class="muted" style="margin:0;font-size:13px">Leave a box empty to use the main setting. Put 0 in Fuel levy if this company's rate already includes it.</p>
@@ -761,13 +763,25 @@ function companyForm(c){
 }
 
 /* ---------- view: editor ---------- */
-function newDraft(companyId){
-  const s = state.settings, inv = s.invoice;
-  const used = new Set(state.invoices.map(i => i.number));
+// A company with its own number start (e.g. SBT-SID) gets its own run: SBT-SID001, SBT-SID002, ... Others use the main prefix and counter.
+function nextNumber(companyId){
+  const inv = state.settings.invoice, used = new Set(state.invoices.map(i => i.number));
+  const c = state.companies.find(x => x.id === companyId), pre = c && String(c.prefix || '').trim();
+  if (pre) {
+    let max = 0;
+    state.invoices.forEach(i => { const n = String(i.number || ''); if (n.startsWith(pre) && /^\d+$/.test(n.slice(pre.length))) max = Math.max(max, Number(n.slice(pre.length))); });
+    let n = max + 1, number;
+    do { number = pre + String(n).padStart(3, '0'); n++; } while (used.has(number));
+    return number;
+  }
   let n = Math.max(1, Number(inv.nextNumber) || 1), number;
   do { number = inv.prefix + String(n).padStart(4, '0'); n++; } while (used.has(number));
+  return number;
+}
+function newDraft(companyId){
+  const s = state.settings, inv = s.invoice;
   const date = isoToday();
-  const d = {id:null, number, date, dueDate: addDays(date, Number(inv.dueDays) || 0), weekEnding: nextSunday(),
+  const d = {id:null, number: nextNumber(''), autoNumber: true, date, dueDate: addDays(date, Number(inv.dueDays) || 0), weekEnding: nextSunday(),
     companyId:'', billTo:{name:'', contact:'', abn:'', address:'', email:'', phone:'', ref:''},
     columns: clone(s.columns), items:[], notes: inv.notes, status:'unpaid',
     waiting: {freeMinutes: num(s.rates.freeMinutes), hourly: num(s.rates.hourly), blockMinutes: num(s.rates.blockMinutes)},
@@ -791,6 +805,7 @@ function blankRow(d, date){
 function applyCompany(d, id){
   const c = state.companies.find(x => x.id === id);
   d.companyId = id || '';
+  if (!d.id && d.autoNumber) d.number = nextNumber(d.companyId);
   d.billTo = c ? {name:c.name||'', contact:c.contact||'', abn:c.abn||'', address:c.address||'', email:c.email||'', phone:c.phone||'', ref:c.ref||''}
                : {name:'', contact:'', abn:'', address:'', email:'', phone:'', ref:''};
   const rateCol = d.columns.find(col => col.type === 'money' && col.multiply);
@@ -940,7 +955,7 @@ async function saveDraft(){
   const t = totals(d);
   const data = {...clone(d), id, number: d.number.trim(), subtotal: t.subtotal, tax: t.tax, total: t.total, updatedAt: new Date().toISOString()};
   if (isNew) data.createdAt = data.updatedAt;
-  delete data.example;
+  delete data.example; delete data.autoNumber;
   const ok = await safe(Store.put('invoices', id, data));
   if (!ok) return null;
   syncPods({...data, id}).catch(() => {});
@@ -1469,7 +1484,7 @@ document.addEventListener('click', async e => {
     confirmBox('Delete company?', `${c?.name || 'This company'} will be removed from your list. Invoices already made for it keep their details.`, 'Delete', () => safe(Store.del('companies', ds.delCompany), 'Company deleted').then(render)); return; }
   if (ds.editInv) { state.modal = null; const inv = state.invoices.find(i => i.id === ds.editInv); if (inv) { state.view = 'edit'; state.draft = clone(inv); render(); window.scrollTo(0,0); } return; }
   if (ds.dupInv) { const src = state.invoices.find(i => i.id === ds.dupInv); if (!src) return;
-    const d = newDraft(); const keep = {number:d.number, date:d.date, dueDate:d.dueDate};
+    const d = newDraft(); const keep = {number: nextNumber(src.companyId), date:d.date, dueDate:d.dueDate};
     Object.assign(d, clone(src), keep, {id:null, status:'unpaid', weekEnding: src.weekEnding ? addDays(src.weekEnding, 7) : d.weekEnding});
     delete d.example; delete d.createdAt;
     delete d.emails;
@@ -1610,7 +1625,7 @@ document.addEventListener('input', e => {
       refreshTotals(); return; }
     if (ds.bill) { d.billTo[ds.bill] = t.value; return; }
     if (t.id === 'notes') { d.notes = t.value; return; }
-    if (t.id && t.id.startsWith('f-') && !['f-tax','f-paid','f-attachPods'].includes(t.id)) { d[t.id.slice(2)] = t.value; return; }
+    if (t.id && t.id.startsWith('f-') && !['f-tax','f-paid','f-attachPods'].includes(t.id)) { d[t.id.slice(2)] = t.value; if (t.id === 'f-number') d.autoNumber = false; return; }
   }
   const s = state.settingsDraft;
   if (s) {
@@ -1688,7 +1703,7 @@ document.addEventListener('submit', async e => {
   if (e.target.id !== 'companyForm') return;
   e.preventDefault();
   const m = state.modal; const get = k => ($('#co-' + k)?.value || '').trim();
-  const data = {name:get('name'), contact:get('contact'), abn:get('abn'), address:$('#co-address').value.trim(), email:get('email'), phone:get('phone'), defaultRate:get('defaultRate'), ref:get('ref')};
+  const data = {name:get('name'), contact:get('contact'), abn:get('abn'), address:$('#co-address').value.trim(), email:get('email'), phone:get('phone'), defaultRate:get('defaultRate'), ref:get('ref'), prefix:get('prefix')};
   const rates = {card: [...document.querySelectorAll('#coCard .colrow')].map(row => ({suburb: row.querySelector('[data-corc="s"]').value.trim(), rate: num(row.querySelector('[data-corc="r"]').value)})).filter(r => r.suburb)};
   RATE_KEYS.forEach(k => { const v = ($('#cor-' + k)?.value || '').trim(); if (v !== '') rates[k] = num(v); });
   data.rates = companyRates({rates}) ? rates : null;

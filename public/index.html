@@ -385,10 +385,10 @@ const DEFAULT_COLUMNS = [
 const DEFAULT_SETTINGS = {
   business:{name:'', abn:'', address:'', phone:'', email:''},
   bank:{accountName:'', bankName:'', bsb:'', accountNumber:''},
-  invoice:{title:'TAX INVOICE', prefix:'INV-', nextNumber:1, dueDays:7, taxEnabled:true, taxLabel:'GST', taxRate:10, currency:'$', reviewEmail:'sbtruckin@outlook.com',
+  invoice:{title:'TAX INVOICE', prefix:'INV-', nextNumber:1, dueDays:14, taxEnabled:true, taxLabel:'GST', taxRate:10, currency:'$', reviewEmail:'sbtruckin@outlook.com',
     emailSubject:'Invoice {number} - {business} - week ending {weekEnding}',
     emailBody:'Hi {contact},\n\nPlease find attached invoice {number} for cartage for the week ending {weekEnding}.\n\nTotal due: {total} (inc GST), due by {dueDate}.\nPayment details are on the invoice.\n\nPlease let me know if you have any questions.\n\nKind regards,\n{business}\n{phone}',
-    notes:'Thank you for your business. Please pay within the terms shown, quoting the invoice number.'},
+    notes:'Thank you for your business. Payment is due within 14 days of the invoice date. Please use the invoice number as your payment reference.'},
   rates:{perTonne:true, minTonnes:24, fuelLevy:15, freeMinutes:90, blockMinutes:15, hourly:60, oversizePct:20, card:[]},
   columns: DEFAULT_COLUMNS
 };
@@ -767,7 +767,12 @@ function companyForm(c){
 const COMPANY_SETUP = [
   {test: /sid\s*x/i, prefix: 'SBT-SID-'},
   {test: /nj\s*w/i, prefix: 'SBT-NJW-', rates: {card:[{suburb:'Dandenong', rate:23.5}], freeMinutes:60, hourly:60, fuelLevy:0}}];
+const OLD_NOTE = 'Thank you for your business. Please pay within the terms shown, quoting the invoice number.';
 function setupCompanies(){
+  // The old default note becomes the 14-day wording, on settings and on unpaid invoices that still carry it.
+  const si = state.settings.invoice;
+  if (si.notes === OLD_NOTE) { const ns = clone(state.settings); ns.invoice.notes = DEFAULT_SETTINGS.invoice.notes; ns.invoice.dueDays = 14; safe(Store.putSettings(ns)); }
+  state.invoices.filter(i => i.notes === OLD_NOTE && i.status !== 'paid').forEach(i => { const data = {...i, notes: DEFAULT_SETTINGS.invoice.notes}; delete data.id; safe(Store.put('invoices', i.id, data)); });
   state.companies.forEach(c => {
     const set = COMPANY_SETUP.find(x => x.test.test(c.name || ''));
     if (!set || c.setup1) return;

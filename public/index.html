@@ -425,7 +425,7 @@ const Store = {
       state.companies = Object.values(this.local.companies || {}).sort((a,b) => String(a.name).localeCompare(b.name));
       state.invoices = Object.values(this.local.invoices || {});
       state.pods = Object.values(this.local.pods || {});
-      state.ready = true; render();
+      state.ready = true; render(); setupCompanies();
     }
     this.syncLabel();
   },
@@ -433,7 +433,7 @@ const Store = {
   subscribe(db){
     this.db = db;
     const seen = {s:false, c:false, i:false};
-    const ready = () => { if (seen.s && seen.c && seen.i && !state.ready) { state.ready = true; render(); } else if (state.ready) softRender(); };
+    const ready = () => { if (seen.s && seen.c && seen.i && !state.ready) { state.ready = true; render(); setupCompanies(); } else if (state.ready) softRender(); };
     const fail = e => { toast('Could not reach your saved data: ' + (e && e.message || 'unknown error')); };
     this.unsubs = [
       db.doc('config/settings').onSnapshot(snap => { state.settings = mergeSettings(snap.exists ? snap.data() : null); seen.s = true; ready(); }, fail),
@@ -760,6 +760,23 @@ function companyForm(c){
         <div><button type="button" class="btn sm" data-action="co-add-rc">${ICON.plus}Add suburb rate</button></div>
       </div></details>
   </div>`;
+}
+
+// One-off setup of the SidXpress and NJW numbers and NJW's rates, so they apply without loading a file.
+// Each company is marked once done, so later edits in Companies are kept.
+const COMPANY_SETUP = [
+  {test: /sid\s*x/i, prefix: 'SBT-SID-'},
+  {test: /nj\s*w/i, prefix: 'SBT-NJW-', rates: {card:[{suburb:'Dandenong', rate:23.5}], freeMinutes:60, hourly:60, fuelLevy:0}}];
+function setupCompanies(){
+  state.companies.forEach(c => {
+    const set = COMPANY_SETUP.find(x => x.test.test(c.name || ''));
+    if (!set || c.setup1) return;
+    const data = {...c, setup1: true};
+    if (!String(c.prefix || '').trim()) data.prefix = set.prefix;
+    if (set.rates && !companyRates(c)) data.rates = clone(set.rates);
+    delete data.id;
+    safe(Store.put('companies', c.id, data));
+  });
 }
 
 /* ---------- view: editor ---------- */

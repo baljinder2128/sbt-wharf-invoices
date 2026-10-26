@@ -76,7 +76,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .tabs{display:none}
 @media (max-width:720px){
   .topnav{display:none}
-  .tabs{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;left:0;right:0;bottom:0;z-index:25;background:var(--surface);
+  .tabs{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:25;background:var(--surface);
     border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);
     padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px)}
   .tabs button{background:none;border:0;padding:9px 4px 8px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:11px;color:var(--muted);cursor:pointer}
@@ -206,6 +206,21 @@ select.in{appearance:none;background-image:linear-gradient(45deg,transparent 50%
 .pill.load[data-n="4"]{background:#C26A00;color:#fff}
 .item-head .btn{font-size:12.5px}
 .over-tick{font-size:13px;font-weight:600}
+.podgrid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
+.podcard{display:grid;grid-template-columns:84px minmax(0,1fr);gap:10px;align-items:start;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.podcard.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+.podthumb{display:block;padding:0;border:0;background:var(--surface-2);border-radius:7px;overflow:hidden;cursor:pointer;aspect-ratio:3/4}
+.podthumb img{width:100%;height:100%;object-fit:cover;display:block}
+.podmeta{display:grid;gap:2px;min-width:0;overflow-wrap:anywhere}
+.podbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+.podmodal{width:min(760px,100%)}
+.podtools{display:flex;gap:6px;flex-wrap:wrap}
+.podstage{position:relative;background:var(--surface-2);border-radius:10px;overflow:hidden;display:grid;place-items:center}
+.podstage canvas{max-width:100%;max-height:60vh;display:block;touch-action:none}
+.podwrap{position:relative;display:inline-block;line-height:0;max-width:100%}
+.podsel{position:absolute;border:2px solid var(--accent);background:rgba(225,6,0,.12);pointer-events:none}
+.rowpod{padding:0;border:1px solid var(--line);border-radius:6px;overflow:hidden;width:34px;height:42px;cursor:pointer;background:var(--surface)}
+.rowpod img{width:100%;height:100%;object-fit:cover;display:block}
 .sugg{position:absolute;left:0;right:0;top:100%;margin-top:3px;z-index:30;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);max-height:260px;overflow:auto;min-width:200px}
 .sugg[hidden]{display:none}
 .sugg button{display:flex;justify-content:space-between;gap:10px;width:100%;background:none;border:0;border-bottom:1px solid var(--line);padding:9px 11px;font:inherit;font-size:14px;color:var(--ink,inherit);text-align:left;cursor:pointer}
@@ -283,6 +298,7 @@ select.in{appearance:none;background-image:linear-gradient(45deg,transparent 50%
     </div>
     <nav class="topnav" id="topnav">
       <button data-nav="invoices">Invoices</button>
+      <button data-nav="pods">PODs</button>
       <button data-nav="companies">Companies</button>
       <button data-nav="settings">Settings</button>
       <button class="btn accent sm" data-action="new-invoice" style="margin-left:8px">+ New invoice</button>
@@ -299,6 +315,7 @@ select.in{appearance:none;background-image:linear-gradient(45deg,transparent 50%
 <nav class="tabs" id="tabs">
   <button data-nav="invoices"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/></svg>Invoices</button>
   <button class="new" data-action="new-invoice"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>New</button>
+  <button data-nav="pods"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>PODs</button>
   <button data-nav="companies"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 21V8l6-4v17M10 21h10V10l-10-2"/><path d="M14 13h2M14 17h2"/></svg>Companies</button>
   <button data-nav="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
 </nav>
@@ -331,6 +348,10 @@ const money = (v, s) => { const sym = s ?? (state.settings?.invoice?.currency ??
 
 const LOGO = 'data:image/png;base64,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';
 const ICON = {
+  cam:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  rotl:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 4v5h5"/><path d="M4.6 9A8 8 0 1 1 6 17.7"/></svg>',
+  rotr:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M20 4v5h-5"/><path d="M19.4 9A8 8 0 1 0 18 17.7"/></svg>',
+  crop:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M6 2v16h16M2 6h16v16"/></svg>',
   mail:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
   edit:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg>',
   trash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
@@ -382,13 +403,13 @@ function mergeSettings(s){
 }
 
 /* ---------- state ---------- */
-const state = {settings: mergeSettings(null), companies: [], invoices: [], ready:false, view:'invoices', viewId:null,
+const state = {settings: mergeSettings(null), companies: [], invoices: [], pods: [], podSel: [], podFilter: 'open', ready:false, view:'invoices', viewId:null,
   draft:null, filter:'all', q:'', modal:null, settingsDraft:null};
 
 /* ---------- storage: shared db when available, device storage otherwise ---------- */
 const LKEY = 'wharf-invoices-v1';
 const Store = {
-  db:null, mode:'loading', local:{settings:null, companies:{}, invoices:{}},
+  db:null, mode:'loading', local:{settings:null, companies:{}, invoices:{}, pods:{}, podimg:{}},
   async init(){
     if (window.WHARF_SERVER) { this.mode = 'server'; this.syncLabel(); await this.load(); return; }
     if (window.WHARF_FIREBASE) { this.initFirebase(window.WHARF_FIREBASE); return; }
@@ -404,6 +425,7 @@ const Store = {
       state.settings = mergeSettings(this.local.settings);
       state.companies = Object.values(this.local.companies || {}).sort((a,b) => String(a.name).localeCompare(b.name));
       state.invoices = Object.values(this.local.invoices || {});
+      state.pods = Object.values(this.local.pods || {});
       state.ready = true; render();
     }
     this.syncLabel();
@@ -417,7 +439,8 @@ const Store = {
     this.unsubs = [
       db.doc('config/settings').onSnapshot(snap => { state.settings = mergeSettings(snap.exists ? snap.data() : null); seen.s = true; ready(); }, fail),
       db.collection('companies').onSnapshot(snap => { state.companies = snap.docs.map(d => ({...d.data(), id:d.id})).sort((a,b) => String(a.name).localeCompare(b.name)); seen.c = true; ready(); }, fail),
-      db.collection('invoices').onSnapshot(snap => { state.invoices = snap.docs.map(d => ({...d.data(), id:d.id})); seen.i = true; ready(); }, fail)
+      db.collection('invoices').onSnapshot(snap => { state.invoices = snap.docs.map(d => ({...d.data(), id:d.id})); seen.i = true; ready(); }, fail),
+      db.collection('pods').onSnapshot(snap => { state.pods = snap.docs.map(d => ({...d.data(), id:d.id})); if (state.ready) softRender(); }, fail)
     ];
     setTimeout(() => { if (!state.ready) { state.ready = true; render(); } }, 6000);
   },
@@ -456,6 +479,7 @@ const Store = {
     state.settings = mergeSettings(d.settings);
     state.companies = (d.companies || []).sort((a,b) => String(a.name).localeCompare(b.name));
     state.invoices = d.invoices || [];
+    state.pods = d.pods || [];
     if (!state.ready) { state.ready = true; render(); } else softRender();
   },
   persist(){ try { localStorage.setItem(LKEY, JSON.stringify(this.local)); } catch(e) { toast('This browser blocked saving. Export a backup from Settings.'); } },
@@ -472,6 +496,29 @@ const Store = {
     if (this.mode === 'server') await this.api('DELETE', `/api/docs/${col}/${encodeURIComponent(id)}`);
     else if (this.mode === 'cloud') await this.db.collection(col).doc(id).delete();
     else { delete this.local[col][id]; this.persist(); }
+  },
+  // Full POD photos live in their own records (podimg/<pod id>) and load one at a time when needed.
+  imgCache: {},
+  async getImg(id){
+    if (this.imgCache[id]) return this.imgCache[id];
+    let d = null;
+    if (this.mode === 'server') d = await this.api('GET', `/api/docs/podimg/${encodeURIComponent(id)}`).catch(() => null);
+    else if (this.mode === 'cloud') { const sn = await this.db.collection('podimg').doc(id).get(); d = sn.exists ? sn.data() : null; }
+    else d = this.local.podimg[id] || null;
+    if (d) this.imgCache[id] = d;
+    return d;
+  },
+  async putImg(id, d){
+    this.imgCache[id] = d;
+    if (this.mode === 'server') await this.api('PUT', `/api/docs/podimg/${encodeURIComponent(id)}`, d);
+    else if (this.mode === 'cloud') await this.db.collection('podimg').doc(id).set(d);
+    else { this.local.podimg[id] = d; this.persist(); }
+  },
+  async delImg(id){
+    delete this.imgCache[id];
+    if (this.mode === 'server') await this.api('DELETE', `/api/docs/podimg/${encodeURIComponent(id)}`);
+    else if (this.mode === 'cloud') await this.db.collection('podimg').doc(id).delete();
+    else { delete this.local.podimg[id]; this.persist(); }
   },
   async putSettings(s){
     state.settings = mergeSettings(clone(s));
@@ -573,7 +620,7 @@ const isRight = c => ['number','weight','money','amount','waiting','over'].inclu
 
 /* ---------- navigation ---------- */
 function go(view, id){ state.view = view; state.viewId = id ?? null; if (view !== 'edit') state.draft = null; if (view !== 'settings') state.settingsDraft = null; render(); window.scrollTo(0,0); }
-function softRender(){ if (['invoices','companies','preview'].includes(state.view) && !state.modal) render(); else updateHeader(); }
+function softRender(){ if (['invoices','companies','preview','pods'].includes(state.view) && !state.modal) render(); else updateHeader(); }
 function updateHeader(){
   $('#bizName').textContent = 'Wharf invoices';
   const navView = state.view === 'preview' || state.view === 'edit' ? 'invoices' : state.view;
@@ -587,7 +634,7 @@ function render(){
   if (state.auth) { app.innerHTML = viewLogin(); $('#modal').innerHTML = ''; return; }
   if (state.loadError) { app.innerHTML = `<div class="panel empty" style="margin-top:20px"><h2>Can't reach your invoices</h2><p class="muted" style="margin:0">${esc(state.loadError)}. Check your internet connection.</p><button class="btn primary" data-action="retry-load">Try again</button></div>`; return; }
   const v = state.view;
-  app.innerHTML = v === 'companies' ? viewCompanies() : v === 'settings' ? viewSettings() : v === 'edit' ? viewEditor()
+  app.innerHTML = v === 'pods' ? viewPods() : v === 'companies' ? viewCompanies() : v === 'settings' ? viewSettings() : v === 'edit' ? viewEditor()
     : v === 'preview' ? viewPreview() : viewInvoices();
   renderModal();
 }
@@ -759,7 +806,7 @@ function viewEditor(){
 
       <section class="panel">
         <div class="panel-h"><h2>Work this week</h2>
-          <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-action="fill-week">${ICON.cal}Add Mon–Fri</button><button class="btn sm" data-action="add-row">${ICON.plus}Add line</button></div></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-action="fill-week">${ICON.cal}Add Mon–Fri</button><button class="btn sm" data-action="add-row">${ICON.plus}Add line</button>${state.pods.some(p => !podInvoice(p) && !(state.draft?.items || []).some(r => r.podId === p.id)) ? `<button class="btn sm" data-action="pick-pods">${ICON.cam}Add from PODs</button>` : ''}</div></div>
         <div class="panel-b stack">
           ${colsDiffer ? `<div class="notice" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>This invoice uses an older column layout.</span><button class="btn sm" data-action="use-current-cols">Switch to current columns</button></div>` : ''}
           <datalist id="suburbList">${[...new Set((state.settings.rates.card||[]).flatMap(r => zoneSuburbs(r.suburb)))].map(x => `<option value="${esc(x)}">`).join('')}</datalist>
@@ -785,6 +832,7 @@ function viewEditor(){
             <label class="f"><span>Due date</span><input class="in" type="date" id="f-dueDate" value="${esc(d.dueDate)}"></label>
           </div>
           <label class="check"><input type="checkbox" id="f-tax" ${d.taxEnabled ? 'checked' : ''}> Add ${esc(d.taxLabel)} (${esc(d.taxRate)}%)</label>
+          ${d.items.some(r => r.podId) ? `<label class="check"><input type="checkbox" id="f-attachPods" ${d.attachPods !== false ? 'checked' : ''}> Add POD photos to the PDF</label>` : ''}
           <label class="check"><input type="checkbox" id="f-paid" ${d.status === 'paid' ? 'checked' : ''}> Mark as paid</label>
         </div>
       </section>
@@ -822,7 +870,9 @@ function itemRow(d, r, i){
   const hasDate = d.columns.some(c => c.type === 'date'), n = loadNo(d, r);
   const head = `<div class="item-head"><div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">${hasDate ? `<span class="pill load" data-load="${r.id}" data-n="${Math.min(n, 4)}">${n ? `Load ${n}` : 'Load'}</span>` : ''}
       <label class="check over-tick"><input type="checkbox" data-over-row="${r.id}" ${r.oversize ? 'checked' : ''}> Oversize / extendable (+${esc(pricing(d).oversizePct)}%)</label></div>
-      ${hasDate ? `<button class="btn sm ghost" data-add-load="${r.id}">${ICON.plus}Add another load this day</button>` : ''}</div>`;
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${r.podId && podById(r.podId) ? `<button class="rowpod" data-pod-open="${esc(r.podId)}" title="Open POD photo"><img src="${podById(r.podId).thumb}" alt="POD"></button>`
+        : `<label class="btn sm ghost" style="cursor:pointer">${ICON.cam}POD photo<input type="file" accept="image/*" capture="environment" data-pod-row="${r.id}" hidden></label>`}
+      ${hasDate ? `<button class="btn sm ghost" data-add-load="${r.id}">${ICON.plus}Add another load this day</button>` : ''}</div></div>`;
   return `<div class="item${r.oversize ? ' over' : ''}" style="--fw:118px">
     <div class="item-fields">${head}${fields}</div>
     <div class="item-tools">
@@ -857,8 +907,8 @@ async function saveDraft(){
   const d = state.draft;
   if (!d.number.trim()) { toast('Give the invoice a number before saving.'); return null; }
   if (state.invoices.some(i => i.number === d.number.trim() && i.id !== d.id)) { toast(`Invoice ${d.number} already exists. Use a different number.`); return null; }
-  // Lines with nothing filled in apart from the date or rate are left off the invoice.
-  const filled = r => d.columns.some(c => !['date','money','amount','waiting'].includes(c.type) && String(r.values[c.key] ?? '').trim());
+  // Lines with nothing filled in apart from the date or rate (and no POD photo) are left off the invoice.
+  const filled = r => !!r.podId || d.columns.some(c => !['date','money','amount','waiting'].includes(c.type) && String(r.values[c.key] ?? '').trim());
   if (d.items.some(r => !filled(r))) d.items = d.items.filter(filled);
   const isNew = !d.id; const id = d.id || uid();
   const t = totals(d);
@@ -867,6 +917,7 @@ async function saveDraft(){
   delete data.example;
   const ok = await safe(Store.put('invoices', id, data));
   if (!ok) return null;
+  syncPods({...data, id}).catch(() => {});
   if (isNew) {
     const m = data.number.match(/(\d+)\s*$/); const s = state.settings;
     if (m && data.number.startsWith(s.invoice.prefix) && Number(m[1]) >= Number(s.invoice.nextNumber)) {
@@ -877,8 +928,184 @@ async function saveDraft(){
 }
 
 /* ---------- view: preview ---------- */
+/* ---------- POD photos ---------- */
+// A POD is a photo of a signed con note. It can sit on its own (not invoiced yet) or be linked to one load on an invoice
+// (pod.invoiceId + pod.rowId, and the load's podId). Details typed on a loose POD become the load's details when it's invoiced.
+const podCols = () => state.settings.columns.filter(c => !['amount','waiting','money'].includes(c.type));
+const podById = id => state.pods.find(p => p.id === id);
+const podInvoice = p => p && p.invoiceId ? state.invoices.find(i => i.id === p.invoiceId) : null;
+async function fileToImage(file){
+  const url = URL.createObjectURL(file);
+  try { const img = new Image(); img.src = url; await img.decode(); return img; } finally { setTimeout(() => URL.revokeObjectURL(url), 2000); }
+}
+async function urlToImage(url){ const img = new Image(); img.src = url; await img.decode(); return img; }
+function scaled(src, max){
+  const w = src.naturalWidth || src.width, h = src.naturalHeight || src.height, k = Math.min(1, max / Math.max(w, h));
+  const c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+  c.getContext('2d').drawImage(src, 0, 0, c.width, c.height); return c;
+}
+// JPEG small enough for one record (two copies of a photo must fit in 1 MB).
+function jpeg(c, maxChars = 440000){ let q = 0.75, out; do { out = c.toDataURL('image/jpeg', q); q -= 0.1; } while (out.length > maxChars && q > 0.25); return out; }
+async function addPodFiles(files, link){
+  const ids = [];
+  for (const f of files) {
+    try {
+      const img = await fileToImage(f), full = scaled(img, 1600), id = uid();
+      const values = {}; podCols().forEach(c => { values[c.key] = ''; });
+      const dc = podCols().find(c => c.type === 'date'); if (dc) values[dc.key] = isoToday();
+      await Store.putImg(id, {orig: jpeg(full)});
+      await Store.put('pods', id, {takenAt: nowLocal(), values, note: '', thumb: jpeg(scaled(full, 360), 60000), w: full.width, h: full.height,
+        invoiceId: link?.invoiceId || null, rowId: link?.rowId || null});
+      ids.push(id);
+    } catch(e) { toast('Could not read that photo: ' + (e.message || e)); }
+  }
+  return ids;
+}
+// Keeps pods in step with a saved invoice: loads with a POD link it to the invoice, PODs no longer on it are freed.
+async function syncPods(inv){
+  const onInv = new Map((inv.items || []).filter(r => r.podId).map(r => [r.podId, r.id]));
+  for (const p of state.pods) {
+    const rowId = onInv.get(p.id);
+    if (rowId && (p.invoiceId !== inv.id || p.rowId !== rowId)) await Store.put('pods', p.id, {...p, invoiceId: inv.id, rowId});
+    else if (!rowId && p.invoiceId === inv.id) await Store.put('pods', p.id, {...p, invoiceId: null, rowId: null});
+  }
+}
+function rowFromPod(d, p){ const r = blankRow(d); podCols().forEach(c => { if (p.values && p.values[c.key] != null && p.values[c.key] !== '') r.values[c.key] = p.values[c.key]; });
+  const sc = d.columns.find(c => c.type === 'suburb'), rc = d.columns.find(c => c.type === 'money' && c.multiply);
+  if (sc && rc && !r.values[rc.key]) { const rate = rateFor(r.values[sc.key]); if (rate != null) r.values[rc.key] = String(rate); }
+  r.podId = p.id; return r; }
+function podLabel(p){ const v = p.values || {}, cn = state.settings.columns.find(c => /con/i.test(c.label)), dc = state.settings.columns.find(c => c.type === 'date');
+  return [dc && v[dc.key] ? fmtDate(v[dc.key]) : '', cn && v[cn.key] ? 'Con note ' + v[cn.key] : ''].filter(Boolean).join(' · ') || 'POD ' + String(p.takenAt || '').replace('T', ' '); }
+function podCard(p){
+  const inv = podInvoice(p), sel = state.podSel.includes(p.id);
+  const cust = state.settings.columns.find(c => /customer/i.test(c.label)), sub = state.settings.columns.find(c => c.type === 'suburb'), v = p.values || {};
+  return `<div class="podcard${sel ? ' sel' : ''}">
+    <button class="podthumb" data-pod-open="${esc(p.id)}" aria-label="Open POD"><img src="${p.thumb}" alt=""></button>
+    <div class="podmeta"><div style="font-weight:600">${esc(podLabel(p))}</div>
+      <div class="muted" style="font-size:12.5px">${esc([cust && v[cust.key], sub && v[sub.key]].filter(Boolean).join(' · ') || (p.note || 'No details yet'))}</div>
+      ${inv ? `<span class="pill paid" style="margin-top:4px">On ${esc(inv.number)}</span>` : `<label class="check" style="margin-top:4px;font-size:13px"><input type="checkbox" data-pod-sel="${esc(p.id)}" ${sel ? 'checked' : ''}> Select</label>`}</div>
+  </div>`;
+}
+function viewPods(){
+  const f = state.podFilter, all = [...state.pods].sort((a, b) => String(b.takenAt).localeCompare(String(a.takenAt)));
+  const list = all.filter(p => f === 'all' || (f === 'open' ? !podInvoice(p) : !!podInvoice(p)));
+  state.podSel = state.podSel.filter(id => list.some(p => p.id === id && !podInvoice(p)));
+  const open = state.invoices.filter(i => i.status !== 'paid').sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  const n = state.podSel.length;
+  return `<div class="page-head"><div><div class="eyebrow">Proof of delivery</div><h1>POD photos</h1></div>
+    <div class="actions"><label class="btn accent" style="cursor:pointer">${ICON.cam}Take POD photo<input type="file" accept="image/*" capture="environment" data-pod-new hidden></label>
+      <label class="btn" style="cursor:pointer">${ICON.up}Upload photos<input type="file" accept="image/*" multiple data-pod-new hidden></label></div></div>
+  <div class="chips" style="margin-bottom:14px">${[['open','Not invoiced'],['done','On invoices'],['all','All']].map(([k, l]) => `<button class="chip" data-pod-filter="${k}" aria-pressed="${f === k}">${l} <span class="muted">${all.filter(p => k === 'all' || (k === 'open' ? !podInvoice(p) : !!podInvoice(p))).length}</span></button>`).join('')}</div>
+  ${n ? `<div class="notice podbar"><b>${n} selected</b><button class="btn sm accent" data-action="pods-new-inv">${ICON.plus}Create invoice from ${n}</button>
+    ${open.length ? `<select class="in" id="podToInv" style="width:auto;min-height:34px"><option value="">Add to invoice…</option>${open.map(i => `<option value="${esc(i.id)}">${esc(i.number)} · ${esc(i.billTo?.name || '')}</option>`).join('')}</select>` : ''}
+    <button class="btn sm ghost" data-action="pods-clear">Clear</button></div>` : ''}
+  ${list.length ? `<div class="podgrid">${list.map(podCard).join('')}</div>`
+    : `<div class="panel empty"><p class="muted" style="margin:0">${f === 'open' ? 'No PODs waiting. Take a photo of each signed con note and it waits here until you put it on an invoice.' : 'No PODs here yet.'}</p></div>`}`;
+}
+// Editing: the working image is a canvas. Rotate, crop and the clearer "scan" look change it; Save writes it back.
+async function openPodEditor(id){
+  const p = podById(id); if (!p) return;
+  state.modal = {type:'pod', id, values: clone(p.values || {}), note: p.note || '', loading: true, crop: false}; renderModal();
+  const d = await Store.getImg(id);
+  if (!state.modal || state.modal.id !== id) return;
+  if (!d) { state.modal.loading = false; state.modal.missing = true; renderModal(); return; }
+  state.modal.canvas = scaled(await urlToImage(d.data || d.orig), 1600); state.modal.loading = false; renderModal();
+}
+function podEditorHTML(m){
+  const p = podById(m.id); if (!p) return '';
+  const inv = podInvoice(p);
+  const row = inv && (inv.items || []).find(r => r.id === p.rowId);
+  const fields = podCols().map(c => { const type = c.type === 'date' ? 'date' : c.type === 'time' ? 'time' : 'text';
+    const im = ['number','weight'].includes(c.type) ? 'inputmode="decimal"' : '';
+    return `<label class="f"><span>${esc(c.label)}</span><input class="in" type="${type}" ${im} data-podv="${esc(c.key)}" value="${esc(m.values[c.key] ?? '')}"></label>`; }).join('');
+  return `<div class="overlay" data-close-modal><div class="modal podmodal" role="dialog" aria-modal="true">
+    <div class="panel-h"><h2>POD photo</h2><button type="button" class="iconbtn" aria-label="Close" data-action="modal-cancel">${ICON.x}</button></div>
+    <div class="panel-b stack">
+      <div class="podtools">
+        <button class="btn sm" data-pod-tool="rotl" ${m.canvas ? '' : 'disabled'}>${ICON.rotl}Rotate</button>
+        <button class="btn sm" data-pod-tool="rotr" ${m.canvas ? '' : 'disabled'}>${ICON.rotr}Rotate</button>
+        <button class="btn sm${m.crop ? ' primary' : ''}" data-pod-tool="crop" ${m.canvas ? '' : 'disabled'}>${ICON.crop}${m.crop ? 'Drag over the part to keep' : 'Crop'}</button>
+        ${m.crop && m.sel ? `<button class="btn sm accent" data-pod-tool="crop-apply">Apply crop</button>` : ''}
+        <button class="btn sm" data-pod-tool="scan" ${m.canvas ? '' : 'disabled'}>Make clearer</button>
+        <button class="btn sm ghost" data-pod-tool="reset" ${m.canvas ? '' : 'disabled'}>Undo all edits</button>
+      </div>
+      <div class="podstage" id="podStage">${m.loading ? '<div class="loading" style="min-height:160px">Loading photo…</div>' : m.missing ? '<p class="muted">The photo for this POD could not be found.</p>' : '<div class="podwrap"><canvas id="podCanvas"></canvas><div class="podsel" id="podSel" hidden></div></div>'}</div>
+      ${inv ? `<div class="notice">On invoice <b>${esc(inv.number)}</b>${row ? `, load ${(inv.items || []).indexOf(row) + 1}` : ''}. Its details are on the invoice. <button class="btn sm" data-edit-inv="${esc(inv.id)}">Open invoice</button> <button class="btn sm ghost" data-pod-unlink="${esc(p.id)}">Take off invoice</button></div>`
+        : `<div class="grid">${fields}</div>`}
+      <label class="f"><span>Note</span><input class="in" data-podnote value="${esc(m.note)}" placeholder="e.g. waited at gate, damaged bundle"></label>
+    </div>
+    <div class="modal-f" style="flex-wrap:wrap"><button class="btn danger" data-pod-del="${esc(p.id)}">${ICON.trash}Delete</button><span style="flex:1"></span>
+      ${!inv && state.draft && state.view === 'edit' ? `<button class="btn" data-pod-to-draft="${esc(p.id)}">Add to this invoice</button>` : ''}
+      ${!inv && !(state.draft && state.view === 'edit') ? `<button class="btn" data-pod-new-inv="${esc(p.id)}">Start invoice with it</button>` : ''}
+      <button class="btn primary" data-pod-save="${esc(p.id)}">Save</button></div>
+  </div></div>`;
+}
+function drawPodCanvas(){
+  const m = state.modal, cv = $('#podCanvas'); if (!m || m.type !== 'pod' || !cv || !m.canvas) return;
+  cv.width = m.canvas.width; cv.height = m.canvas.height; cv.getContext('2d').drawImage(m.canvas, 0, 0);
+  const sel = $('#podSel'); if (sel && m.sel) { Object.assign(sel.style, {left: m.sel.x * 100 + '%', top: m.sel.y * 100 + '%', width: m.sel.w * 100 + '%', height: m.sel.h * 100 + '%'}); sel.hidden = false; }
+}
+function podTool(tool){
+  const m = state.modal, c = m.canvas; if (!c && tool !== 'reset') return;
+  if (tool === 'rotl' || tool === 'rotr') { const o = document.createElement('canvas'); o.width = c.height; o.height = c.width; const x = o.getContext('2d');
+    x.translate(o.width / 2, o.height / 2); x.rotate((tool === 'rotr' ? 1 : -1) * Math.PI / 2); x.drawImage(c, -c.width / 2, -c.height / 2); m.canvas = o; m.sel = null; m.edited = true; }
+  if (tool === 'crop') { m.crop = !m.crop; m.sel = null; }
+  if (tool === 'crop-apply' && m.sel) { const s = m.sel, o = document.createElement('canvas');
+    o.width = Math.max(1, Math.round(s.w * c.width)); o.height = Math.max(1, Math.round(s.h * c.height));
+    o.getContext('2d').drawImage(c, Math.round(s.x * c.width), Math.round(s.y * c.height), o.width, o.height, 0, 0, o.width, o.height); m.canvas = o; m.crop = false; m.sel = null; m.edited = true; }
+  if (tool === 'scan') { const x = c.getContext('2d'), img = x.getImageData(0, 0, c.width, c.height), a = img.data;
+    for (let i = 0; i < a.length; i += 4) { const l = 0.299 * a[i] + 0.587 * a[i+1] + 0.114 * a[i+2]; const v = Math.max(0, Math.min(255, (l - 128) * 1.6 + 150)); a[i] = a[i+1] = a[i+2] = v; }
+    x.putImageData(img, 0, 0); m.edited = true; }
+  if (tool === 'reset') { Store.getImg(m.id).then(async d => { if (d) { m.canvas = scaled(await urlToImage(d.orig), 1600); m.sel = null; m.crop = false; m.edited = true; m.reset = true; renderModal(); } }); return; }
+  renderModal();
+}
+async function savePod(id){
+  const m = state.modal, p = podById(id); if (!p) return;
+  const upd = {...p, note: m.note};
+  if (!podInvoice(p)) upd.values = {...m.values};
+  if (m.edited && m.canvas) { const d = await Store.getImg(id) || {}; const data = jpeg(m.canvas);
+    await Store.putImg(id, {orig: d.orig || data, data}); delete podImgs[id];
+    upd.thumb = jpeg(scaled(m.canvas, 360), 60000); upd.w = m.canvas.width; upd.h = m.canvas.height; }
+  if (await safe(Store.put('pods', id, upd), 'POD saved')) { closeModal(); render(); }
+}
+async function deletePod(id){
+  const p = podById(id), inv = podInvoice(p);
+  if (inv) await Store.put('invoices', inv.id, {...inv, items: (inv.items || []).map(r => r.podId === id ? (({podId, ...rest}) => rest)(r) : r)});
+  if (state.draft) state.draft.items.forEach(r => { if (r.podId === id) delete r.podId; });
+  await safe(Promise.all([Store.del('pods', id), Store.delImg(id).catch(() => {})]), 'POD deleted'); closeModal(); render();
+}
+function startInvoiceFromPods(ids){
+  const pods = ids.map(podById).filter(Boolean);
+  const d = newDraft(); const dc = d.columns.find(c => c.type === 'date');
+  d.items = pods.map(p => rowFromPod(d, p));
+  if (dc) d.items.sort((a, b) => String(a.values[dc.key] || '9').localeCompare(String(b.values[dc.key] || '9')));
+  state.podSel = []; state.modal = null; state.view = 'edit'; state.draft = d; render(); window.scrollTo(0, 0);
+  toast(`${pods.length} load${pods.length === 1 ? '' : 's'} added from PODs. Pick the company and check the details.`);
+}
+async function addPodsToInvoice(invId, ids){
+  const inv = state.invoices.find(i => i.id === invId); if (!inv) return;
+  const items = [...(inv.items || []), ...ids.map(podById).filter(Boolean).map(p => rowFromPod(inv, p))];
+  const next = {...inv, items}, t = totals(next);
+  if (await safe(Store.put('invoices', inv.id, {...next, subtotal: t.subtotal, tax: t.tax, total: t.total}), `Added to ${inv.number}`)) { await syncPods(next); state.podSel = []; render(); }
+}
+// Full-size photos for the PDF, loaded ahead so the PDF can be built straight away.
+async function loadPodImages(inv){
+  const out = {};
+  for (const r of inv.items || []) if (r.podId && !podImgs[r.podId]) { const d = await Store.getImg(r.podId).catch(() => null); if (d) { const src = d.data || d.orig; const img = await urlToImage(src).catch(() => null); if (img) out[r.podId] = {src, w: img.naturalWidth, h: img.naturalHeight}; } }
+  return out;
+}
+const podImgs = {};
+async function warmPodImages(inv){ Object.assign(podImgs, await loadPodImages(inv)); }
+function podStripHTML(inv){
+  const rows = (inv.items || []).filter(r => r.podId && podById(r.podId));
+  if (!rows.length) return '';
+  return `<section class="panel" style="margin-top:16px"><div class="panel-h"><h2>POD photos</h2><span class="muted" style="font-size:13px">${inv.attachPods === false ? 'Not added to the PDF' : 'Added to the PDF after the invoice'}</span></div>
+    <div class="panel-b"><div class="podgrid">${rows.map(r => { const p = podById(r.podId); return `<div class="podcard"><button class="podthumb" data-pod-open="${esc(p.id)}"><img src="${p.thumb}" alt=""></button>
+      <div class="podmeta"><div style="font-weight:600">Load ${(inv.items || []).indexOf(r) + 1}</div><div class="muted" style="font-size:12.5px">${esc(cellText(inv.columns.find(c => c.type === 'date') || {}, r, inv) || '')}</div></div></div>`; }).join('')}</div></div></section>`;
+}
 function viewPreview(){
   const inv = state.invoices.find(i => i.id === state.viewId);
+  if (inv && (inv.items || []).some(r => r.podId)) warmPodImages(inv);
   if (!inv) return `<div class="panel empty"><p class="muted" style="margin:0">This invoice was deleted.</p><button class="btn" data-nav="invoices">Back to invoices</button></div>`;
   const st = statusOf(inv);
   return `
@@ -895,7 +1122,7 @@ function viewPreview(){
     <button class="btn primary" data-pdf="${esc(inv.id)}">${ICON.pdf}Download PDF</button>
   </div>
   ${inv.example ? `<div class="notice ex" style="margin-bottom:14px">This is an example invoice so you can see the layout. Delete it whenever you like.</div>` : ''}
-  <p class="muted sheet-hint">Swipe sideways to see the whole page. The PDF is laid out on A4.</p><div class="sheet-wrap">${sheetHTML(inv)}</div>${emailLogHTML(inv)}`;
+  <p class="muted sheet-hint">Swipe sideways to see the whole page. The PDF is laid out on A4.</p><div class="sheet-wrap">${sheetHTML(inv)}</div>${podStripHTML(inv)}${emailLogHTML(inv)}`;
 }
 function sheetHTML(inv){
   const s = state.settings, biz = s.business, bank = s.bank, t = totals(inv), b = inv.billTo || {};
@@ -989,9 +1216,16 @@ function buildPDF(inv){
     lines.forEach(l => { doc.splitTextToSize(String(l), half).forEach(p => { doc.text(p, x, yy); yy += 4.6; }); }); };
   block(M, 'PAYMENT DETAILS', [bank.accountName && 'Account name: ' + bank.accountName, bank.bankName && 'Bank: ' + bank.bankName, bank.bsb && 'BSB: ' + bank.bsb, bank.accountNumber && 'Account: ' + bank.accountNumber].filter(Boolean));
   block(M + half + 8, 'NOTES', String(inv.notes||'').split('\n').filter(x => x.trim()));
+  if (inv.attachPods !== false) (inv.items || []).forEach((r, i) => { const im = podImgs[r.podId]; if (!im) return;
+    doc.addPage(); doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.setTextColor(...NAVY);
+    const dc = cols.find(c => c.type === 'date'), cn = cols.find(c => /con/i.test(c.label));
+    doc.text(['POD', `Load ${i + 1}`, dc && cellText(dc, r, inv), cn && r.values[cn.key] && 'Con note ' + r.values[cn.key]].filter(Boolean).join('  ·  '), M, M);
+    const bw = W - 2*M, bh = 297 - 2*M - 8, k = Math.min(bw / im.w, bh / im.h);
+    try { doc.addImage(im.src, 'JPEG', M + (bw - im.w * k) / 2, M + 6, im.w * k, im.h * k); } catch(e) {} });
   return doc;
 }
 async function downloadPDF(inv){
+  if ((inv.items || []).some(r => r.podId && !podImgs[r.podId])) await warmPodImages(inv);
   let blob;
   try { blob = buildPDF(inv).output('blob'); } catch(e) { toast(e.message); return; }
   const name = `Invoice ${inv.number} ${inv.billTo?.name || ''}`.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') + '.pdf';
@@ -1039,6 +1273,7 @@ async function sendEmail(inv, kind){
   const co = state.companies.find(c => c.id === inv.companyId);
   const to = String(review ? s.invoice.reviewEmail : (inv.billTo?.email || co?.email || '')).trim();
   if (!to) { toast(review ? 'Add a review email in Settings first.' : `Add an email for ${inv.billTo?.name || 'this company'} in Companies first.`); return; }
+  if ((inv.items || []).some(r => r.podId && !podImgs[r.podId])) await warmPodImages(inv);
   let blob; try { blob = buildPDF(inv).output('blob'); } catch(e) { toast(e.message); return; }
   const name = `Invoice ${inv.number} ${inv.billTo?.name || ''}`.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') + '.pdf';
   const t = totals(inv);
@@ -1179,6 +1414,13 @@ function renderModal(){
       <div class="panel-h"><h2>${m.id ? 'Edit company' : 'Add company'}</h2><button type="button" class="iconbtn" aria-label="Close" data-action="modal-cancel">${ICON.x}</button></div>
       <div class="panel-b">${companyForm(state.companies.find(c => c.id === m.id))}</div>
       <div class="modal-f"><button type="button" class="btn" data-action="modal-cancel">Cancel</button><button type="submit" class="btn primary">Save company</button></div></form></div>`;
+  if (m.type === 'pod') { host.innerHTML = podEditorHTML(m); drawPodCanvas(); return; }
+  if (m.type === 'podpick') { const free = state.pods.filter(p => !podInvoice(p) && !(state.draft?.items || []).some(r => r.podId === p.id)).sort((a, b) => String(a.takenAt).localeCompare(String(b.takenAt)));
+    host.innerHTML = `<div class="overlay" data-close-modal><div class="modal" role="dialog" aria-modal="true" style="width:min(640px,100%)">
+      <div class="panel-h"><h2>Add loads from PODs</h2><button type="button" class="iconbtn" aria-label="Close" data-action="modal-cancel">${ICON.x}</button></div>
+      <div class="panel-b"><div class="podgrid">${free.map(p => `<label class="podcard${m.pick.includes(p.id) ? ' sel' : ''}" style="cursor:pointer"><span class="podthumb"><img src="${p.thumb}" alt=""></span>
+        <span class="podmeta"><span style="font-weight:600">${esc(podLabel(p))}</span><span class="check" style="font-size:13px"><input type="checkbox" data-pick="${esc(p.id)}" ${m.pick.includes(p.id) ? 'checked' : ''}> Add</span></span></label>`).join('')}</div></div>
+      <div class="modal-f"><button class="btn" data-action="modal-cancel">Cancel</button><button class="btn primary" data-pod-pick ${m.pick.length ? '' : 'disabled'}>Add ${m.pick.length || ''} load${m.pick.length === 1 ? '' : 's'}</button></div></div></div>`; return; }
   const first = host.querySelector('input'); if (first && m.type === 'company') setTimeout(() => first.focus(), 30);
 }
 function closeModal(){ state.modal = null; renderModal(); }
@@ -1199,13 +1441,26 @@ document.addEventListener('click', async e => {
   if (ds.editCompany) { state.modal = {type:'company', id: ds.editCompany}; renderModal(); return; }
   if (ds.delCompany) { const c = state.companies.find(x => x.id === ds.delCompany);
     confirmBox('Delete company?', `${c?.name || 'This company'} will be removed from your list. Invoices already made for it keep their details.`, 'Delete', () => safe(Store.del('companies', ds.delCompany), 'Company deleted').then(render)); return; }
-  if (ds.editInv) { const inv = state.invoices.find(i => i.id === ds.editInv); if (inv) { state.view = 'edit'; state.draft = clone(inv); render(); window.scrollTo(0,0); } return; }
+  if (ds.editInv) { state.modal = null; const inv = state.invoices.find(i => i.id === ds.editInv); if (inv) { state.view = 'edit'; state.draft = clone(inv); render(); window.scrollTo(0,0); } return; }
   if (ds.dupInv) { const src = state.invoices.find(i => i.id === ds.dupInv); if (!src) return;
     const d = newDraft(); const keep = {number:d.number, date:d.date, dueDate:d.dueDate};
     Object.assign(d, clone(src), keep, {id:null, status:'unpaid', weekEnding: src.weekEnding ? addDays(src.weekEnding, 7) : d.weekEnding});
     delete d.example; delete d.createdAt;
-    d.items = d.items.map(r => { const v = {...r.values}; d.columns.forEach(c => { if (c.type === 'date' && v[c.key]) v[c.key] = addDays(v[c.key], 7); }); return {id: uid(), values: v}; });
+    delete d.emails;
+    d.items = d.items.map(r => { const v = {...r.values}; d.columns.forEach(c => { if (c.type === 'date' && v[c.key]) v[c.key] = addDays(v[c.key], 7); }); return {id: uid(), values: v, oversize: !!r.oversize}; });
     state.view = 'edit'; state.draft = d; render(); window.scrollTo(0,0); toast('Copied with dates moved forward one week'); return; }
+  if (ds.podOpen) { openPodEditor(ds.podOpen); return; }
+  if (ds.podTool) { podTool(ds.podTool); return; }
+  if (ds.podSave) { savePod(ds.podSave); return; }
+  if (ds.podDel) { const p = podById(ds.podDel); const inv = podInvoice(p);
+    confirmBox('Delete this POD photo?', inv ? `It will also be taken off ${inv.number}.` : 'The photo is removed for good.', 'Delete', () => deletePod(ds.podDel)); return; }
+  if (ds.podUnlink) { const p = podById(ds.podUnlink), inv = podInvoice(p); if (!inv) return;
+    const next = {...inv, items: (inv.items || []).map(r => r.podId === p.id ? (({podId, ...rest}) => rest)(r) : r)};
+    await safe(Store.put('invoices', inv.id, next)); await syncPods(next); closeModal(); render(); toast('POD taken off the invoice. The load stays.'); return; }
+  if (ds.podNewInv) { startInvoiceFromPods([ds.podNewInv]); return; }
+  if (ds.podToDraft) { const p = podById(ds.podToDraft), d = state.draft; if (p && d) { d.items.push(rowFromPod(d, p)); closeModal(); render(); toast('Load added from POD'); } return; }
+  if (ds.podPick) { const d = state.draft, ids = state.modal?.pick || []; if (d) { ids.map(podById).filter(Boolean).forEach(p => d.items.push(rowFromPod(d, p))); } closeModal(); render(); if (ids.length) toast(`${ids.length} load${ids.length === 1 ? '' : 's'} added from PODs`); return; }
+  if (ds.podFilter) { state.podFilter = ds.podFilter; render(); return; }
   if (ds.elogAdd) { const inv = state.invoices.find(i => i.id === ds.elogAdd); if (!inv) return;
     const to = inv.billTo?.email || ''; await safe(Store.put('invoices', inv.id, {...inv, emails: [...(inv.emails || []), {id: uid(), at: nowLocal(), kind: 'Invoice', to, subject: '', note: ''}]})); render(); return; }
   if (ds.elogDel) { const [iid, eid] = ds.elogDel.split('|'); const inv = state.invoices.find(i => i.id === iid); if (!inv) return;
@@ -1213,7 +1468,7 @@ document.addEventListener('click', async e => {
   if (ds.togglePaid) { const inv = state.invoices.find(i => i.id === ds.togglePaid); if (!inv) return;
     await safe(Store.put('invoices', inv.id, {...inv, status: inv.status === 'paid' ? 'unpaid' : 'paid'}), inv.status === 'paid' ? 'Marked unpaid' : 'Marked paid'); render(); return; }
   if (ds.delInv) { const inv = state.invoices.find(i => i.id === ds.delInv);
-    confirmBox(`Delete invoice ${inv?.number || ''}?`, 'This removes it for good. Download the PDF first if you need a copy.', 'Delete invoice', async () => { await safe(Store.del('invoices', ds.delInv), 'Invoice deleted'); go('invoices'); }); return; }
+    confirmBox(`Delete invoice ${inv?.number || ''}?`, 'This removes it for good. Download the PDF first if you need a copy.', 'Delete invoice', async () => { await safe(Store.del('invoices', ds.delInv), 'Invoice deleted'); await syncPods({id: ds.delInv, items: []}).catch(() => {}); go('invoices'); }); return; }
   if (ds.email) { const inv = state.invoices.find(i => i.id === ds.email); if (inv) sendEmail(inv, 'customer'); return; }
   if (ds.review) { const inv = state.invoices.find(i => i.id === ds.review); if (inv) sendEmail(inv, 'review'); return; }
   if (ds.pdf) { const inv = state.invoices.find(i => i.id === ds.pdf); if (inv) downloadPDF(inv); return; }
@@ -1246,6 +1501,9 @@ document.addEventListener('click', async e => {
   if (ds.colDel) { const s = state.settingsDraft; if (s.columns.length <= 1) { toast('Keep at least one column.'); return; } s.columns.splice(+ds.colDel, 1); render(); return; }
 
   switch (ds.action) {
+    case 'pods-new-inv': startInvoiceFromPods([...state.podSel]); break;
+    case 'pods-clear': state.podSel = []; render(); break;
+    case 'pick-pods': state.modal = {type:'podpick', pick: []}; renderModal(); break;
     case 'new-invoice': state.view = 'edit'; state.draft = newDraft(); render(); window.scrollTo(0,0); break;
     case 'cancel-edit': { const id = state.draft?.id; go(id ? 'preview' : 'invoices', id); break; }
     case 'add-row': state.draft.items.push(blankRow(state.draft)); rerenderItems(); break;
@@ -1291,11 +1549,23 @@ function rerenderItems(){ const d = state.draft; const host = $('#items'); if (!
   host.innerHTML = d.items.length ? d.items.map((r, i) => itemRow(d, r, i)).join('') : `<p class="muted" style="margin:0">No lines yet. Use <b>Add Mon–Fri</b> to start a week, or <b>Add line</b> for each con note.</p>`;
   refreshTotals(); }
 
+// Crop: drag a box over the photo; it is kept as fractions of the image so it survives re-renders.
+document.addEventListener('pointerdown', e => {
+  const m = state.modal; if (!m || m.type !== 'pod' || !m.crop || e.target.id !== 'podCanvas') return;
+  e.preventDefault(); const cv = e.target, r = cv.getBoundingClientRect(), sx = (e.clientX - r.left) / r.width, sy = (e.clientY - r.top) / r.height;
+  const sel = $('#podSel'); cv.setPointerCapture(e.pointerId);
+  const move = ev => { const x = Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)), y = Math.min(1, Math.max(0, (ev.clientY - r.top) / r.height));
+    m.sel = {x: Math.min(sx, x), y: Math.min(sy, y), w: Math.abs(x - sx), h: Math.abs(y - sy)};
+    Object.assign(sel.style, {left: m.sel.x * 100 + '%', top: m.sel.y * 100 + '%', width: m.sel.w * 100 + '%', height: m.sel.h * 100 + '%'}); sel.hidden = false; };
+  const up = () => { cv.removeEventListener('pointermove', move); cv.removeEventListener('pointerup', up); if (m.sel && (m.sel.w < 0.03 || m.sel.h < 0.03)) m.sel = null; renderModal(); };
+  cv.addEventListener('pointermove', move); cv.addEventListener('pointerup', up);
+});
 document.addEventListener('focusin', e => { if (e.target.dataset?.type === 'suburb') showSugg(e.target); });
 document.addEventListener('focusout', e => { if (e.target.dataset?.type === 'suburb') { const box = document.querySelector(`[data-sugg="${e.target.dataset.row}"]`); setTimeout(() => { if (box) box.hidden = true; }, 300); } });
 document.addEventListener('mousedown', e => { if (e.target.closest('.sugg')) e.preventDefault(); });
 document.addEventListener('input', e => {
   const t = e.target, ds = t.dataset;
+  if (state.modal?.type === 'pod') { if (ds.podv) { state.modal.values[ds.podv] = t.value; return; } if (ds.podnote !== undefined) { state.modal.note = t.value; return; } }
   if (t.id === 'q') { state.q = t.value; const pos = t.selectionStart; render(); const q = $('#q'); q.focus(); try { q.setSelectionRange(pos, pos); } catch(_) {} return; }
   const d = state.draft;
   if (d) {
@@ -1306,7 +1576,7 @@ document.addEventListener('input', e => {
       refreshTotals(); return; }
     if (ds.bill) { d.billTo[ds.bill] = t.value; return; }
     if (t.id === 'notes') { d.notes = t.value; return; }
-    if (t.id && t.id.startsWith('f-') && !['f-tax','f-paid'].includes(t.id)) { d[t.id.slice(2)] = t.value; return; }
+    if (t.id && t.id.startsWith('f-') && !['f-tax','f-paid','f-attachPods'].includes(t.id)) { d[t.id.slice(2)] = t.value; return; }
   }
   const s = state.settingsDraft;
   if (s) {
@@ -1324,6 +1594,14 @@ document.addEventListener('change', async e => {
   if (t.id === 'f-tax' && d) { d.taxEnabled = t.checked; refreshTotals(); return; }
   if (ds.overRow && d) { const r = d.items.find(x => x.id === ds.overRow); if (r) { r.oversize = t.checked; t.closest('.item')?.classList.toggle('over', t.checked); refreshTotals(); } return; }
   if (t.id === 'f-paid' && d) { d.status = t.checked ? 'paid' : 'unpaid'; return; }
+  if (t.id === 'f-attachPods' && d) { d.attachPods = t.checked; return; }
+  if (ds.pick && state.modal?.type === 'podpick') { const m = state.modal; m.pick = t.checked ? [...new Set([...m.pick, ds.pick])] : m.pick.filter(x => x !== ds.pick); renderModal(); return; }
+  if (ds.podNew !== undefined && t.files?.length) { toast('Saving photo…'); const ids = await addPodFiles([...t.files]); t.value = ''; if (ids.length) { toast(ids.length > 1 ? `${ids.length} PODs saved` : 'POD saved. Add its details now or later.'); render(); if (ids.length === 1) openPodEditor(ids[0]); } return; }
+  if (ds.podRow && d && t.files?.length) { const r = d.items.find(x => x.id === ds.podRow); toast('Saving photo…');
+    const ids = await addPodFiles([t.files[0]], {invoiceId: d.id, rowId: ds.podRow}); t.value = '';
+    if (ids[0] && r) { r.podId = ids[0]; rerenderItems(); render(); toast('POD photo added to this load'); } return; }
+  if (t.id === 'podToInv' && t.value) { addPodsToInvoice(t.value, [...state.podSel]); return; }
+  if (ds.podSel) { state.podSel = t.checked ? [...new Set([...state.podSel, ds.podSel])] : state.podSel.filter(x => x !== ds.podSel); render(); return; }
   if (t.id === 'f-date' && d) { d.date = t.value; return; }
   if (s && ds.col !== undefined && ds.prop) {
     const c = s.columns[+ds.col];

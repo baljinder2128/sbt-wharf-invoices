@@ -79,20 +79,28 @@ app.post('/api/me/password', auth, (req, res) => {
 });
 
 // ---------- invoice data ----------
-const COLS = new Set(['companies', 'invoices', 'config']);
+// podimg holds the full POD photos; they are fetched one at a time, not with /api/data.
+const COLS = new Set(['companies', 'invoices', 'config', 'pods', 'podimg']);
 const ID = /^[A-Za-z0-9_\-.~:@+]{1,100}$/;
 function checkPath(col, id) {
   if (!COLS.has(col) || !ID.test(id) || (col === 'config' && id !== 'settings')) throw bad('Unknown record', 404);
 }
 
 app.get('/api/data', auth, (req, res) => {
-  const out = { settings: null, companies: [], invoices: [] };
-  for (const r of db.prepare('SELECT col, id, data FROM docs').all()) {
+  const out = { settings: null, companies: [], invoices: [], pods: [] };
+  for (const r of db.prepare("SELECT col, id, data FROM docs WHERE col != 'podimg'").all()) {
     const d = JSON.parse(r.data);
     if (r.col === 'config') out.settings = d;
     else out[r.col].push({ ...d, id: r.id });
   }
   res.json(out);
+});
+app.get('/api/docs/:col/:id', auth, (req, res) => {
+  const { col, id } = req.params;
+  checkPath(col, id);
+  const r = db.prepare('SELECT data FROM docs WHERE col = ? AND id = ?').get(col, id);
+  if (!r) throw bad('Not found', 404);
+  res.json({ ...JSON.parse(r.data), id });
 });
 app.put('/api/docs/:col/:id', auth, (req, res) => {
   const { col, id } = req.params;

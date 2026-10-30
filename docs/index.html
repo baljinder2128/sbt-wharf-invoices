@@ -544,7 +544,7 @@ function waitInfo(inv, values){
   const a = toMin(values[times[0].key]), b = toMin(values[times[1].key]);
   if (a == null || b == null) return {mins:null, over:0, charge:0};
   const mins = b >= a ? b - a : b + 1440 - a;
-  const w = waitParams(inv); let over = Math.max(0, mins - w.free); if (w.block > 0) over = Math.floor(over / w.block) * w.block;
+  const w = waitParams(inv); let over = Math.max(0, mins - w.free); if (w.block > 0) over = Math.ceil(over / w.block) * w.block; // any part of a block is charged as a full block
   return {mins, over, charge: Math.round(over / 60 * w.hourly * 100) / 100};
 }
 function cartage(inv, values){
@@ -886,7 +886,7 @@ function viewEditor(){
         <div class="panel-b stack">
           ${colsDiffer ? `<div class="notice" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>This invoice uses an older column layout.</span><button class="btn sm" data-action="use-current-cols">Switch to current columns</button></div>` : ''}
           <datalist id="suburbList">${[...new Set((state.settings.rates.card||[]).flatMap(r => zoneSuburbs(r.suburb)))].map(x => `<option value="${esc(x)}">`).join('')}</datalist>
-          ${d.columns.some(c => c.type === 'waiting') ? `<p class="muted" style="margin:0;font-size:13px">${d.rateCard ? `<b>Using ${esc(d.billTo.name)}'s own rates.</b> ` : ''}${pricing(d).perTonne ? `Rate is per tonne, minimum ${pricing(d).minTonnes} t. ` : ''}Demurrage after ${fmtHM(waitParams(d).free)} hr is charged at ${money(waitParams(d).hourly, d.currency)}/hr${waitParams(d).block ? ` in full ${waitParams(d).block}-minute blocks` : ''}.${pricing(d).fuelLevy ? ` Tick Oversize / extendable on a load to add ${pricing(d).oversizePct}% to its cartage.${pricing(d).fuelLevy ? ` Fuel levy ${pricing(d).fuelLevy}% is added on cartage, oversize and demurrage.` : ' No fuel levy is added.'}` : ''}</p>` : ''}
+          ${d.columns.some(c => c.type === 'waiting') ? `<p class="muted" style="margin:0;font-size:13px">${d.rateCard ? `<b>Using ${esc(d.billTo.name)}'s own rates.</b> ` : ''}${pricing(d).perTonne ? `Rate is per tonne, minimum ${pricing(d).minTonnes} t. ` : ''}Demurrage after ${fmtHM(waitParams(d).free)} hr is charged at ${money(waitParams(d).hourly, d.currency)}/hr${waitParams(d).block ? ` in ${waitParams(d).block}-minute blocks (a block is charged as soon as it starts)` : ''}.${pricing(d).fuelLevy ? ` Tick Oversize / extendable on a load to add ${pricing(d).oversizePct}% to its cartage.${pricing(d).fuelLevy ? ` Fuel levy ${pricing(d).fuelLevy}% is added on cartage, oversize and demurrage.` : ' No fuel levy is added.'}` : ''}</p>` : ''}
           <div class="items" id="items">${d.items.length ? d.items.map((r, i) => itemRow(d, r, i)).join('') : `<p class="muted" style="margin:0">No lines yet. Use <b>Add Mon–Fri</b> to start a week, or <b>Add line</b> for each con note.</p>`}</div>
         </div>
       </section>

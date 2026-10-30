@@ -532,7 +532,7 @@ const Store = {
 async function safe(p, ok){ try { await p; if (ok) toast(ok); return true; } catch(e) { toast('Not saved: ' + (e && e.message || 'please try again')); return false; } }
 
 /* ---------- invoice maths ---------- */
-function waitParams(inv){ const w = {...state.settings.rates, ...((inv && inv.waiting) || {})}; return {free: num(w.freeMinutes), hourly: num(w.hourly), block: num(w.blockMinutes)}; }
+function waitParams(inv){ const w = {...state.settings.rates, ...((inv && inv.waiting) || {})}; return {free: num(w.freeMinutes), hourly: num(w.hourly), block: num(w.blockMinutes), up: w.blockRoundUp !== false}; }
 function pricing(inv){ const p = {...state.settings.rates, ...((inv && inv.pricing) || {})}; return {perTonne: !!p.perTonne, minTonnes: num(p.minTonnes), fuelLevy: num(p.fuelLevy), oversizePct: num(p.oversizePct)}; }
 function toMin(t){ const m = /^(\d{1,2}):(\d{2})/.exec(String(t||'')); return m ? (+m[1]) * 60 + (+m[2]) : null; }
 const fmtHM = m => `${Math.floor(m/60)}:${pad(Math.round(m%60))}`;
@@ -544,7 +544,7 @@ function waitInfo(inv, values){
   const a = toMin(values[times[0].key]), b = toMin(values[times[1].key]);
   if (a == null || b == null) return {mins:null, over:0, charge:0};
   const mins = b >= a ? b - a : b + 1440 - a;
-  const w = waitParams(inv); let over = Math.max(0, mins - w.free); if (w.block > 0) over = Math.ceil(over / w.block) * w.block; // any part of a block is charged as a full block
+  const w = waitParams(inv); let over = Math.max(0, mins - w.free); if (w.block > 0) over = Math[w.up ? 'ceil' : 'floor'](over / w.block) * w.block; // up: a started block is charged in full; otherwise completed blocks only
   return {mins, over, charge: Math.round(over / 60 * w.hourly * 100) / 100};
 }
 function cartage(inv, values){
@@ -586,7 +586,7 @@ const zoneSuburbs = z => String(z||'').split('/').map(x => x.trim()).filter(Bool
 // waiting and pricing; otherwise the main rate card in Settings is used.
 const RATE_KEYS = ['minTonnes','fuelLevy','freeMinutes','hourly','blockMinutes'];
 function companyRates(c){ const r = c && c.rates; if (!r) return null;
-  const has = RATE_KEYS.some(k => r[k] !== '' && r[k] != null) || (r.card || []).length; return has ? r : null; }
+  const has = RATE_KEYS.some(k => r[k] !== '' && r[k] != null) || r.blockRoundUp != null || (r.card || []).length; return has ? r : null; }
 const cardFor = d => (d && d.rateCard) || state.settings.rates.card || [];
 function rateFor(suburb, d = state.draft){
   const k = String(suburb||'').trim().toLowerCase(); if (!k) return null;
@@ -759,6 +759,8 @@ function companyForm(c){
         <p class="muted" style="margin:0;font-size:13px">Leave a box empty to use the main setting. Put 0 in Fuel levy if this company's rate already includes it.</p>
         <div class="grid">${[['minTonnes','Minimum tonnes'],['fuelLevy','Fuel levy %'],['freeMinutes','Free waiting (minutes)'],['hourly','Demurrage per hour'],['blockMinutes','Charge in blocks of (min)']].map(([k, l]) =>
           `<label class="f"><span>${l}</span><input class="in" inputmode="decimal" id="cor-${k}" placeholder="${esc(state.settings.rates[k])}" value="${esc((c.rates || {})[k] ?? '')}"></label>`).join('')}</div>
+        <label class="f"><span>Part of a block</span><select class="in" id="cor-round">${[['', 'Same as main setting'], ['up', 'Charge a started block in full'], ['down', 'Charge completed blocks only']].map(([v, l]) =>
+          `<option value="${v}" ${((c.rates || {}).blockRoundUp == null ? '' : c.rates.blockRoundUp ? 'up' : 'down') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
         <div class="cols" id="coCard">${((c.rates || {}).card || []).map(coCardRow).join('')}</div>
         <div><button type="button" class="btn sm" data-action="co-add-rc">${ICON.plus}Add suburb rate</button></div>
       </div></details>
@@ -769,7 +771,7 @@ function companyForm(c){
 // Each company is marked once done, so later edits in Companies are kept.
 const COMPANY_SETUP = [
   {test: /sid\s*x/i, prefix: 'SBT-SID-', label: 'SidXpress'},
-  {test: /nj\s*w/i, prefix: 'SBT-NJW-', label: 'NJW Transport', rates: {card:[{suburb:'Dandenong', rate:23.5}], freeMinutes:60, hourly:60, fuelLevy:0}}];
+  {test: /nj\s*w/i, prefix: 'SBT-NJW-', label: 'NJW Transport', rates: {card:[{suburb:'Dandenong', rate:23.5}], freeMinutes:60, hourly:60, fuelLevy:0, blockRoundUp:false}}];
 const OLD_NOTE = 'Thank you for your business. Please pay within the terms shown, quoting the invoice number.';
 function setupCompanies(){
   // The old default note becomes the 14-day wording, on settings and on unpaid invoices that still carry it.
@@ -778,8 +780,11 @@ function setupCompanies(){
   state.invoices.filter(i => i.notes === OLD_NOTE && i.status !== 'paid').forEach(i => { const data = {...i, notes: DEFAULT_SETTINGS.invoice.notes}; delete data.id; safe(Store.put('invoices', i.id, data)); });
   state.companies.forEach(c => {
     const set = COMPANY_SETUP.find(x => x.test.test(c.name || ''));
-    if (!set || c.setup1) return;
-    const data = {...c, setup1: true};
+    if (!set) return;
+    // setup2: NJW keeps charging completed waiting blocks only (SidXpress rounds a started block up).
+    if (c.setup1 && !c.setup2 && set.rates && c.rates && c.rates.blockRoundUp == null) { const data = {...c, setup2: true, rates: {...c.rates, blockRoundUp: false}}; delete data.id; safe(Store.put('companies', c.id, data)); return; }
+    if (c.setup1) return;
+    const data = {...c, setup1: true, setup2: true};
     if (!String(c.prefix || '').trim()) data.prefix = set.prefix;
     if (set.rates && !companyRates(c)) data.rates = clone(set.rates);
     delete data.id;
@@ -819,7 +824,7 @@ function newDraft(companyId){
   const d = {id:null, number: nextNumber(''), autoNumber: true, date, dueDate: addDays(date, Number(inv.dueDays) || 0), weekEnding: nextSunday(),
     companyId:'', billTo:{name:'', contact:'', abn:'', address:'', email:'', phone:'', ref:''},
     columns: clone(s.columns), items:[], notes: inv.notes, status:'unpaid',
-    waiting: {freeMinutes: num(s.rates.freeMinutes), hourly: num(s.rates.hourly), blockMinutes: num(s.rates.blockMinutes)},
+    waiting: {freeMinutes: num(s.rates.freeMinutes), hourly: num(s.rates.hourly), blockMinutes: num(s.rates.blockMinutes), blockRoundUp: s.rates.blockRoundUp !== false},
     pricing: {perTonne: !!s.rates.perTonne, minTonnes: num(s.rates.minTonnes), fuelLevy: num(s.rates.fuelLevy), oversizePct: num(s.rates.oversizePct)},
     taxEnabled: !!inv.taxEnabled, taxLabel: inv.taxLabel, taxRate: num(inv.taxRate), currency: inv.currency, title: inv.title};
   if (companyId) applyCompany(d, companyId);
@@ -846,7 +851,7 @@ function applyCompany(d, id){
   const rateCol = d.columns.find(col => col.type === 'money' && col.multiply);
   if (c && c.defaultRate && rateCol) d.items.forEach(r => { if (!r.values[rateCol.key]) r.values[rateCol.key] = String(c.defaultRate); });
   const g = state.settings.rates, own = companyRates(c) || {}, pick = k => (own[k] !== '' && own[k] != null) ? num(own[k]) : num(g[k]);
-  d.waiting = {freeMinutes: pick('freeMinutes'), hourly: pick('hourly'), blockMinutes: pick('blockMinutes')};
+  d.waiting = {freeMinutes: pick('freeMinutes'), hourly: pick('hourly'), blockMinutes: pick('blockMinutes'), blockRoundUp: own.blockRoundUp != null ? !!own.blockRoundUp : g.blockRoundUp !== false};
   d.pricing = {...(d.pricing || {}), perTonne: !!g.perTonne, minTonnes: pick('minTonnes'), fuelLevy: pick('fuelLevy'), oversizePct: num(g.oversizePct)};
   d.rateCard = (own.card || []).length ? clone(own.card) : null;
   // Re-price loads whose suburb is on the card now in use.
@@ -886,7 +891,7 @@ function viewEditor(){
         <div class="panel-b stack">
           ${colsDiffer ? `<div class="notice" style="display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span>This invoice uses an older column layout.</span><button class="btn sm" data-action="use-current-cols">Switch to current columns</button></div>` : ''}
           <datalist id="suburbList">${[...new Set((state.settings.rates.card||[]).flatMap(r => zoneSuburbs(r.suburb)))].map(x => `<option value="${esc(x)}">`).join('')}</datalist>
-          ${d.columns.some(c => c.type === 'waiting') ? `<p class="muted" style="margin:0;font-size:13px">${d.rateCard ? `<b>Using ${esc(d.billTo.name)}'s own rates.</b> ` : ''}${pricing(d).perTonne ? `Rate is per tonne, minimum ${pricing(d).minTonnes} t. ` : ''}Demurrage after ${fmtHM(waitParams(d).free)} hr is charged at ${money(waitParams(d).hourly, d.currency)}/hr${waitParams(d).block ? ` in ${waitParams(d).block}-minute blocks (a block is charged as soon as it starts)` : ''}.${pricing(d).fuelLevy ? ` Tick Oversize / extendable on a load to add ${pricing(d).oversizePct}% to its cartage.${pricing(d).fuelLevy ? ` Fuel levy ${pricing(d).fuelLevy}% is added on cartage, oversize and demurrage.` : ' No fuel levy is added.'}` : ''}</p>` : ''}
+          ${d.columns.some(c => c.type === 'waiting') ? `<p class="muted" style="margin:0;font-size:13px">${d.rateCard ? `<b>Using ${esc(d.billTo.name)}'s own rates.</b> ` : ''}${pricing(d).perTonne ? `Rate is per tonne, minimum ${pricing(d).minTonnes} t. ` : ''}Demurrage after ${fmtHM(waitParams(d).free)} hr is charged at ${money(waitParams(d).hourly, d.currency)}/hr${waitParams(d).block ? ` in ${waitParams(d).block}-minute blocks${waitParams(d).up ? ' (a block is charged as soon as it starts)' : ' (completed blocks only)'}` : ''}.${pricing(d).fuelLevy ? ` Tick Oversize / extendable on a load to add ${pricing(d).oversizePct}% to its cartage.${pricing(d).fuelLevy ? ` Fuel levy ${pricing(d).fuelLevy}% is added on cartage, oversize and demurrage.` : ' No fuel levy is added.'}` : ''}</p>` : ''}
           <div class="items" id="items">${d.items.length ? d.items.map((r, i) => itemRow(d, r, i)).join('') : `<p class="muted" style="margin:0">No lines yet. Use <b>Add Mon–Fri</b> to start a week, or <b>Add line</b> for each con note.</p>`}</div>
         </div>
       </section>
@@ -1746,6 +1751,7 @@ document.addEventListener('submit', async e => {
   const data = {name:get('name'), contact:get('contact'), abn:get('abn'), address:$('#co-address').value.trim(), email:get('email'), phone:get('phone'), defaultRate:get('defaultRate'), ref:get('ref'), prefix:get('prefix')};
   const rates = {card: [...document.querySelectorAll('#coCard .colrow')].map(row => ({suburb: row.querySelector('[data-corc="s"]').value.trim(), rate: num(row.querySelector('[data-corc="r"]').value)})).filter(r => r.suburb)};
   RATE_KEYS.forEach(k => { const v = ($('#cor-' + k)?.value || '').trim(); if (v !== '') rates[k] = num(v); });
+  const rd = $('#cor-round')?.value; if (rd) rates.blockRoundUp = rd === 'up';
   data.rates = companyRates({rates}) ? rates : null;
   if (!data.name) { toast('Enter the company name.'); return; }
   const id = m.id || uid();

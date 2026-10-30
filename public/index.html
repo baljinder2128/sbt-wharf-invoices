@@ -750,6 +750,7 @@ function companyForm(c){
     <label class="f"><span>Address</span><textarea class="in" id="co-address" rows="3">${esc(c.address)}</textarea></label>
     <div class="grid">${f('email','Email','email')}${f('phone','Phone','tel')}</div>
     <div class="grid">${f('defaultRate','Default rate per load','text','inputmode="decimal" placeholder="e.g. 450.00"')}${f('ref','Reference / PO (optional)')}</div>
+    <label class="f"><span>Folder name for its PDFs (optional)</span><input class="in" id="co-folder" value="${esc(c.folder)}" placeholder="e.g. SidXpress. Empty uses the company name"></label>
     <label class="f"><span>Invoice numbers start with (optional)</span><input class="in" id="co-prefix" value="${esc(c.prefix)}" placeholder="e.g. SBT-SID- gives SBT-SID-001, SBT-SID-002"></label>
     <details class="corates" ${companyRates(c) ? 'open' : ''}><summary><b>Own rates for this company</b> <span class="muted">(optional, used instead of the main rate card)</span></summary>
       <div class="stack" style="margin-top:10px">
@@ -942,8 +943,9 @@ function itemRow(d, r, i){
     }
     const type = c.type === 'date' ? 'date' : c.type === 'time' ? 'time' : 'text';
     const im = ['number','weight','money'].includes(c.type) ? 'inputmode="decimal"' : '';
-    const list = c.type === 'suburb' ? 'autocomplete="off" placeholder="Tap to pick"' : '';
-    const input = `<label class="f ${cls}"><span>${esc(c.label)}</span><input class="in ${im ? 'num' : ''}" type="${type}" ${im} ${list} data-row="${r.id}" data-key="${esc(c.key)}" data-type="${c.type}" value="${esc(v)}"></label>`;
+    const cust = isCust(c), list = c.type === 'suburb' || cust ? 'autocomplete="off" placeholder="Tap to pick"' : '';
+    const input = `<label class="f ${cls}"><span>${esc(c.label)}</span><input class="in ${im ? 'num' : ''}" type="${type}" ${im} ${list} data-row="${r.id}" data-key="${esc(c.key)}" data-type="${c.type}" ${cust ? 'data-cust="1"' : ''} value="${esc(v)}"></label>`;
+    if (cust) return `<div style="display:grid;gap:4px" class="${cls}"><div style="position:relative">${input}<div class="sugg" data-csugg="${r.id}" hidden></div></div><div data-cust-hint="${r.id}">${custHint(r, v)}</div></div>`;
     return c.type === 'suburb' ? `<div style="display:grid;gap:4px" class="${cls}"><div style="position:relative">${input}<div class="sugg" data-sugg="${r.id}" hidden></div></div><div data-sub-hint="${r.id}">${subHint(r, v)}</div></div>` : input;
   }).join('');
   const hasDate = d.columns.some(c => c.type === 'date'), n = loadNo(d, r);
@@ -968,6 +970,26 @@ function showSugg(inp){
   if (!list.length || (list.length === 1 && list[0].name.toLowerCase() === q)) { box.hidden = true; return; }
   box.innerHTML = list.map(x => `<button type="button" data-pick-sub="${esc(x.name)}" data-pick-row="${inp.dataset.row}"><span>${esc(x.name)}</span><span class="num muted">${money(num(x.rate), state.draft?.currency || '$')}</span></button>`).join('');
   box.hidden = false;
+}
+// Pick list for the Customer box: the saved customer names plus any typed on earlier invoices.
+const isCust = c => c.type === 'text' && /customer/i.test(c.label);
+const savedCustomers = () => (state.settings.invoice.customers || []).filter(Boolean);
+function customerNames(){
+  const set = new Map(); savedCustomers().forEach(n => set.set(n.toLowerCase(), n));
+  state.invoices.forEach(i => (i.columns || []).filter(isCust).forEach(c => (i.items || []).forEach(r => { const n = String(r.values?.[c.key] || '').trim(); if (n && !set.has(n.toLowerCase())) set.set(n.toLowerCase(), n); })));
+  return [...set.values()].sort((a, b) => a.localeCompare(b));
+}
+function showCustSugg(inp){
+  const box = document.querySelector(`[data-csugg="${inp.dataset.row}"]`); if (!box) return;
+  const q = inp.value.trim().toLowerCase();
+  const list = customerNames().filter(n => !q || n.toLowerCase().includes(q));
+  if (!list.length || (list.length === 1 && list[0].toLowerCase() === q)) { box.hidden = true; return; }
+  box.innerHTML = list.map(n => `<button type="button" data-pick-cust="${esc(n)}" data-pick-row="${inp.dataset.row}"><span>${esc(n)}</span></button>`).join('');
+  box.hidden = false;
+}
+function custHint(r, v){
+  const n = String(v || '').trim(); if (!n || savedCustomers().some(x => x.toLowerCase() === n.toLowerCase())) return '';
+  return `<button class="btn sm ghost" style="font-size:12px;padding:2px 8px;min-height:0" data-add-cust-row="${r.id}">${ICON.plus}Save customer to list</button>`;
 }
 // A suburb that isn't on the rate card yet gets a button to add it with the rate typed on this line.
 function subHint(r, v){
@@ -1303,6 +1325,43 @@ function buildPDF(inv){
     try { doc.addImage(im.src, 'JPEG', M + (bw - im.w * k) / 2, M + 6, im.w * k, im.h * k); } catch(e) {} });
   return doc;
 }
+/* ---------- invoice folder (computer only) ---------- */
+// The chosen folder is kept on this computer (a browser can't share it between devices). Each company's PDFs go in
+// their own folder inside it, e.g. Invoices\SidXpress\Invoice-SBT-SID-001-....pdf, made the first time it's needed.
+const Folder = {
+  supported: () => !!window.showDirectoryPicker,
+  db(){ return new Promise((res, rej) => { const r = indexedDB.open('sbt-wharf', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }); },
+  async get(){ try { const db = await this.db(); return await new Promise(res => { const q = db.transaction('kv').objectStore('kv').get('folder'); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); }); } catch(e) { return null; } },
+  async set(h){ const db = await this.db(); await new Promise((res, rej) => { const t = db.transaction('kv', 'readwrite'); h ? t.objectStore('kv').put(h, 'folder') : t.objectStore('kv').delete('folder'); t.oncomplete = res; t.onerror = () => rej(t.error); }); this.name = h ? h.name : ''; },
+  name: '',
+  async choose(){ const h = await showDirectoryPicker({id: 'sbt-invoice-folder', mode: 'readwrite', startIn: 'documents'}); await this.set(h); return h; }
+};
+Folder.get().then(h => { Folder.name = h ? h.name : ''; });
+const companyFolder = inv => { const c = state.companies.find(x => x.id === inv.companyId);
+  return String((c && c.folder) || inv.billTo?.name || 'Other').replace(/\b(pty\.?|ltd\.?|limited)\b/gi, '').replace(/[\\/:*?"<>|.]+/g, ' ').replace(/\s+/g, ' ').trim() || 'Other'; };
+// Saves into the chosen folder. Returns the path it saved to, or null when no folder is set (or it isn't allowed).
+async function saveToFolder(blob, name, inv){
+  if (!Folder.supported()) return null;
+  const root = await Folder.get(); if (!root) return null;
+  let perm = await root.queryPermission({mode: 'readwrite'});
+  if (perm !== 'granted') perm = await root.requestPermission({mode: 'readwrite'});
+  if (perm !== 'granted') return null;
+  const sub = companyFolder(inv), dir = await root.getDirectoryHandle(sub, {create: true});
+  const fh = await dir.getFileHandle(name, {create: true}), w = await fh.createWritable(); await w.write(blob); await w.close();
+  return `${root.name}\\${sub}\\${name}`;
+}
+// Tries the folder; when the browser wants a fresh click to allow it, asks once with a button.
+function folderSave(blob, name, inv, after, fallback){
+  const go = async () => {
+    try { const path = await saveToFolder(blob, name, inv); if (path) { after(path); return; } }
+    catch(e) {
+      if (e?.name === 'SecurityError' || e?.name === 'NotAllowedError') { confirmBox('Save to your invoice folder', `Allow the app to save ${name} in your ${Folder.name || 'invoice'} folder.`, 'Save PDF', go); return; }
+      toast('Could not save in your folder: ' + e.message);
+    }
+    fallback();
+  };
+  return go();
+}
 async function downloadPDF(inv){
   if ((inv.items || []).some(r => r.podId && !podImgs[r.podId])) await warmPodImages(inv);
   let blob;
@@ -1315,7 +1374,7 @@ async function downloadPDF(inv){
     catch(e) { if (e && e.code !== 'declined') toast('Could not save the PDF: ' + (e.message || e.code)); }
     return;
   }
-  saveFile(blob, name);
+  folderSave(blob, name, inv, path => toast('PDF saved in ' + path), () => saveFile(blob, name));
 }
 // Each invoice keeps a log of the emails made from it. Entries can be edited, added by hand or removed.
 const nowLocal = () => { const d = new Date(); return `${isoToday()}T${pad(d.getHours())}:${pad(d.getMinutes())}`; };
@@ -1360,6 +1419,7 @@ async function sendEmail(inv, kind){
   const body = review ? [`Please review invoice ${inv.number}.`, '', `Bill to: ${inv.billTo?.name || '-'}`, inv.weekEnding ? `Week ending: ${fmtDate(inv.weekEnding)}` : '',
     `Loads: ${(inv.items || []).length}`, `Total: ${money(t.total, inv.currency)}`, '', `PDF attached: ${name}`].join('\n') : fillTemplate(s.invoice.emailBody, inv);
   const openMail = () => { location.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`; };
+  const sent = where => { toast(`Email opening. Attach ${name} from ${where}.`); logEmail(inv, {kind: review ? 'Review' : 'Invoice', to, subject}); setTimeout(openMail, 400); };
   const save = async () => {
     try {
       if (window.showSaveFilePicker) {
@@ -1379,6 +1439,7 @@ async function sendEmail(inv, kind){
     logEmail(inv, {kind: review ? 'Review' : 'Invoice', to, subject});
     setTimeout(openMail, 400);
   };
+  if (Folder.supported() && await Folder.get()) { folderSave(blob, name, inv, path => sent(path), save); return; }
   await save();
 }
 // Outside Claude: on iPhone/iPad, hand the file to the share sheet (Save to Files, Mail, Messages); elsewhere download it.
@@ -1427,6 +1488,10 @@ function viewSettings(){
         <label class="f"><span>Message</span><textarea class="in" rows="10" data-set="invoice.emailBody">${esc(s.invoice.emailBody)}</textarea></label>
       </div></section>
 
+    <section class="panel"><div class="panel-h"><h2>Customers</h2></div>
+      <div class="panel-b stack"><p class="muted" style="margin:0;font-size:13.5px">Names to pick from in the Customer box on each load (e.g. Surdex). One per line. Names typed on earlier invoices show in the list too.</p>
+        <textarea class="in" id="set-customers" rows="4" placeholder="Surdex">${esc((s.invoice.customers || []).join('\n'))}</textarea></div></section>
+
     <section class="panel"><div class="panel-h"><h2>Rate card</h2><button class="btn sm primary" data-action="add-rc">${ICON.plus}Add new suburb rate</button></div>
       <div class="panel-b stack">
         <p class="muted" style="margin:0;font-size:13.5px">Tap <b>Add new suburb rate</b>, type the suburb and its rate, then <b>Save settings</b>. Put several suburbs in one zone by separating them with a slash, e.g. Braeside / Dandenong / Knox. Type a suburb on an invoice line and its rate fills in automatically. You can also add a new suburb straight from an invoice line.</p>
@@ -1471,6 +1536,14 @@ function viewSettings(){
         <div style="display:flex;align-items:flex-end"><button class="btn" type="submit">Change password</button></div>
       </form></section>` : Store.fbAuth ? `<section class="panel"><div class="panel-h"><h2>Your login</h2><button class="btn sm" data-action="logout">Log out</button></div>
       <div class="panel-b" style="display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap"><span class="muted">Logged in as ${esc(Store.fbAuth.currentUser?.email || '')}</span><button class="btn sm" data-action="reset-pw">Email me a password reset link</button></div></section>` : ''}
+
+    <section class="panel"><div class="panel-h"><h2>Invoice folder</h2></div>
+      <div class="panel-b stack">
+        ${Folder.supported() ? `<p class="muted" style="margin:0;font-size:13.5px">Saved PDFs go into this folder, in a folder for each company (e.g. <b>${esc(Folder.name || 'Invoices')}\\SidXpress</b>). Pick your OneDrive invoices folder to have them on every device. This is set on this computer only.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span class="pill">${Folder.name ? esc(Folder.name) : 'No folder chosen, PDFs go to Downloads'}</span>
+          <button class="btn sm" data-action="pick-folder">${ICON.up}${Folder.name ? 'Change folder' : 'Choose folder'}</button>${Folder.name ? `<button class="btn sm ghost" data-action="clear-folder">Use Downloads</button>` : ''}</div>`
+        : `<p class="muted" style="margin:0;font-size:13.5px">On this device the PDF opens the share sheet. Choose <b>Save to Files</b> and pick your OneDrive folder. Choosing a fixed folder works on a computer in Edge or Chrome.</p>`}
+      </div></section>
 
     <section class="panel"><div class="panel-h"><h2>Backup</h2></div>
       <div class="panel-b stack">
@@ -1565,6 +1638,14 @@ document.addEventListener('click', async e => {
     const v = {...r.values}; d.columns.forEach(c => { if (c.type === 'date' && v[c.key]) v[c.key] = addDays(v[c.key], 1); });
     d.items.splice(i + 1, 0, {id: uid(), values: v, oversize: !!r.oversize}); rerenderItems(); return; }
   if (ds.colMove) { const s = state.settingsDraft, i = +ds.colMove, j = i + (+ds.dir); [s.columns[i], s.columns[j]] = [s.columns[j], s.columns[i]]; render(); return; }
+  if (ds.pickCust !== undefined) { const inp = document.querySelector(`[data-row="${ds.pickRow}"][data-cust]`);
+    if (inp) { inp.value = ds.pickCust; inp.dispatchEvent(new Event('input', {bubbles: true})); }
+    const box = document.querySelector(`[data-csugg="${ds.pickRow}"]`); if (box) box.hidden = true; return; }
+  if (ds.addCustRow) { const d = state.draft, r = d?.items.find(x => x.id === ds.addCustRow); const c = d?.columns.find(isCust); if (!r || !c) return;
+    const n = String(r.values[c.key] || '').trim(); if (!n) return;
+    const ns = clone(state.settings); ns.invoice.customers = [...savedCustomers(), n].sort((a, b) => a.localeCompare(b));
+    await safe(Store.putSettings(ns), `${n} saved to your customer list`); state.settings.invoice.customers = ns.invoice.customers;
+    const h = document.querySelector(`[data-cust-hint="${r.id}"]`); if (h) h.innerHTML = ''; return; }
   if (ds.pickSub !== undefined) { const inp = document.querySelector(`[data-row="${ds.pickRow}"][data-type="suburb"]`);
     if (inp) { inp.value = ds.pickSub; inp.dispatchEvent(new Event('input', {bubbles: true})); }
     const box = document.querySelector(`[data-sugg="${ds.pickRow}"]`); if (box) box.hidden = true; return; }
@@ -1625,6 +1706,8 @@ document.addEventListener('click', async e => {
     case 'add-rc': state.settingsDraft.rates.card = state.settingsDraft.rates.card || []; state.settingsDraft.rates.card.unshift({suburb:'', rate:''}); render(); $('[data-rc="0"][data-prop="suburb"]')?.focus(); break;
     case 'add-col': state.settingsDraft.columns.push({key: 'c' + uid(), label:'New column', type:'text', width:'normal', multiply:false}); render(); break;
     case 'reset-cols': state.settingsDraft.columns = clone(DEFAULT_COLUMNS); render(); break;
+    case 'pick-folder': { try { await Folder.choose(); toast('Invoices will save in ' + Folder.name); render(); } catch(e) { if (e?.name !== 'AbortError') toast('Could not use that folder: ' + e.message); } break; }
+    case 'clear-folder': { await Folder.set(null); toast('PDFs will go to Downloads'); render(); break; }
     case 'export': { const data = JSON.stringify({app:'wharf-invoices', version:1, exportedAt:new Date().toISOString(), settings:state.settings, companies:state.companies, invoices:state.invoices}, null, 2);
       let dl = null; try { dl = await window.claude?.use?.('downloads'); } catch(e) {}
       if (dl) { try { await dl.save({filename:`wharf-invoices-backup-${isoToday()}.json`, data}); toast('Backup saved'); } catch(e) { if (e?.code !== 'declined') toast('Could not save the backup.'); } }
@@ -1647,7 +1730,8 @@ document.addEventListener('pointerdown', e => {
   const up = () => { cv.removeEventListener('pointermove', move); cv.removeEventListener('pointerup', up); if (m.sel && (m.sel.w < 0.03 || m.sel.h < 0.03)) m.sel = null; renderModal(); };
   cv.addEventListener('pointermove', move); cv.addEventListener('pointerup', up);
 });
-document.addEventListener('focusin', e => { if (e.target.dataset?.type === 'suburb') showSugg(e.target); });
+document.addEventListener('focusin', e => { if (e.target.dataset?.type === 'suburb') showSugg(e.target); if (e.target.dataset?.cust) showCustSugg(e.target); });
+document.addEventListener('focusout', e => { if (e.target.dataset?.cust) { const box = document.querySelector(`[data-csugg="${e.target.dataset.row}"]`); setTimeout(() => { if (box) box.hidden = true; }, 300); } });
 document.addEventListener('focusout', e => { if (e.target.dataset?.type === 'suburb') { const box = document.querySelector(`[data-sugg="${e.target.dataset.row}"]`); setTimeout(() => { if (box) box.hidden = true; }, 300); } });
 document.addEventListener('mousedown', e => { if (e.target.closest('.sugg')) e.preventDefault(); });
 document.addEventListener('input', e => {
@@ -1660,6 +1744,7 @@ document.addEventListener('input', e => {
       if (ds.type === 'suburb') { const rate = rateFor(t.value); const rc = d.columns.find(c => c.type === 'money' && c.multiply);
         if (rate != null && rc) { r.values[rc.key] = String(rate); const inp = document.querySelector(`[data-row="${r.id}"][data-key="${rc.key}"]`); if (inp) inp.value = rate; }
         const h = document.querySelector(`[data-sub-hint="${r.id}"]`); if (h) h.innerHTML = subHint(r, t.value); showSugg(t); }
+      if (ds.cust) { const h = document.querySelector(`[data-cust-hint="${r.id}"]`); if (h) h.innerHTML = custHint(r, t.value); showCustSugg(t); }
       refreshTotals(); return; }
     if (ds.bill) { d.billTo[ds.bill] = t.value; return; }
     if (t.id === 'notes') { d.notes = t.value; return; }
@@ -1667,6 +1752,7 @@ document.addEventListener('input', e => {
   }
   const s = state.settingsDraft;
   if (s) {
+    if (t.id === 'set-customers') { s.invoice.customers = t.value.split('\n').map(x => x.trim()).filter(Boolean); return; }
     if (ds.set) { const [g, k] = ds.set.split('.'); s[g][k] = t.type === 'checkbox' ? t.checked : t.value; return; }
     if (ds.col !== undefined && ds.prop === 'label') { s.columns[+ds.col].label = t.value; return; }
     if (ds.rc !== undefined) { s.rates.card[+ds.rc][ds.prop] = t.value; return; }
@@ -1745,7 +1831,7 @@ document.addEventListener('submit', async e => {
   if (e.target.id !== 'companyForm') return;
   e.preventDefault();
   const m = state.modal; const get = k => ($('#co-' + k)?.value || '').trim();
-  const data = {name:get('name'), contact:get('contact'), abn:get('abn'), address:$('#co-address').value.trim(), email:get('email'), phone:get('phone'), defaultRate:get('defaultRate'), ref:get('ref'), prefix:get('prefix')};
+  const data = {name:get('name'), contact:get('contact'), abn:get('abn'), address:$('#co-address').value.trim(), email:get('email'), phone:get('phone'), defaultRate:get('defaultRate'), ref:get('ref'), prefix:get('prefix'), folder:get('folder')};
   const rates = {card: [...document.querySelectorAll('#coCard .colrow')].map(row => ({suburb: row.querySelector('[data-corc="s"]').value.trim(), rate: num(row.querySelector('[data-corc="r"]').value)})).filter(r => r.suburb)};
   RATE_KEYS.forEach(k => { const v = ($('#cor-' + k)?.value || '').trim(); if (v !== '') rates[k] = num(v); });
   const rd = $('#cor-round')?.value; if (rd) rates.blockRoundUp = rd === 'up';

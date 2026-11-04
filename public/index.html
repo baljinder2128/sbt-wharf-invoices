@@ -596,6 +596,7 @@ function statusOf(inv){
   return 'unpaid';
 }
 const STATUS_TEXT = {paid:'Paid', unpaid:'Unpaid', overdue:'Overdue'};
+const statusLabel = inv => { const st = statusOf(inv); return st === 'paid' && inv.paidDate ? `Paid ${fmtDate(inv.paidDate)}` : STATUS_TEXT[st]; };
 // Loads on the same date are numbered 1, 2, 3 in the order they appear.
 function loadNo(inv, row){
   const dc = (inv.columns || state.settings.columns).find(c => c.type === 'date'); if (!dc) return 0;
@@ -698,7 +699,7 @@ function viewInvoices(){
         <span class="c-main" style="min-width:0"><div class="co">${esc(i.billTo?.name || 'No company')}${i.example ? ' <span class="muted" style="font-weight:400">(example)</span>' : ''}</div><div class="sub">Issued ${fmtDate(i.date)}${i.dueDate ? ' · due ' + fmtDate(i.dueDate) : ''}${(i.emails || []).length ? ` · <span class="emailed">${ICON.mail}Emailed ${fmtDate(String(i.emails[i.emails.length - 1].at).split('T')[0])}</span>` : ''}</div></span>
         <span class="c-week sub num">${fmtDate(i.weekEnding) || '—'}</span>
         <span class="amt">${money(totals(i).total, i.currency)}</span>
-        <span class="pillwrap"><span class="pill ${st}">${STATUS_TEXT[st]}</span></span>
+        <span class="pillwrap"><span class="pill ${st}">${esc(statusLabel(i))}</span></span>
       </button>`; }).join('')}
     </div>`}`;
 }
@@ -914,6 +915,7 @@ function viewEditor(){
           <label class="check"><input type="checkbox" id="f-tax" ${d.taxEnabled ? 'checked' : ''}> Add ${esc(d.taxLabel)} (${esc(d.taxRate)}%)</label>
           ${d.items.some(r => r.podId) ? `<label class="check"><input type="checkbox" id="f-attachPods" ${d.attachPods !== false ? 'checked' : ''}> Add POD photos to the PDF</label>` : ''}
           <label class="check"><input type="checkbox" id="f-paid" ${d.status === 'paid' ? 'checked' : ''}> Mark as paid</label>
+          ${d.status === 'paid' ? `<label class="f"><span>Paid on</span><input class="in" type="date" id="f-paidDate" value="${esc(d.paidDate || '')}"></label>` : ''}
         </div>
       </section>
       <section class="panel">
@@ -1212,11 +1214,12 @@ function viewPreview(){
   return `
   <div class="prev-bar">
     <button class="btn ghost" data-nav="invoices">${ICON.back}Invoices</button>
-    <span class="pill ${st}">${STATUS_TEXT[st]}</span>
+    <span class="pill ${st}">${esc(statusLabel(inv))}${inv.status === 'paid' && inv.paidNote ? ' · ' + esc(inv.paidNote) : ''}</span>
     <span class="spacer"></span>
     <button class="btn" data-edit-inv="${esc(inv.id)}">${ICON.edit}Edit</button>
     <button class="btn" data-dup-inv="${esc(inv.id)}">${ICON.copy}Next week</button>
-    <button class="btn" data-toggle-paid="${esc(inv.id)}">${ICON.check}${inv.status === 'paid' ? 'Mark unpaid' : 'Mark paid'}</button>
+    ${inv.status === 'paid' ? `<button class="btn" data-pay-inv="${esc(inv.id)}">${ICON.edit}Change paid date</button><button class="btn" data-toggle-paid="${esc(inv.id)}">Mark unpaid</button>`
+      : `<button class="btn primary" data-pay-inv="${esc(inv.id)}">${ICON.check}Mark paid</button>`}
     <button class="btn danger" data-del-inv="${esc(inv.id)}">${ICON.trash}Delete</button>
     <button class="btn" data-review="${esc(inv.id)}">${ICON.mail}Email for review</button>
     <button class="btn accent" data-email="${esc(inv.id)}">${ICON.mail}Email ${esc(inv.billTo?.name || 'customer')}</button>
@@ -1248,7 +1251,7 @@ function sheetHTML(inv){
     <div class="s-tot">
       ${totalRows(inv, t).map(([k, v]) => `<div><span>${esc(k)}</span><span>${money(v, inv.currency)}</span></div>`).join('')}
       <div class="g"><span>Total due</span><span>${money(t.total, inv.currency)}</span></div>
-      ${inv.status === 'paid' ? `<div style="justify-content:flex-end"><span class="s-paid">PAID</span></div>` : ''}
+      ${inv.status === 'paid' ? `<div style="justify-content:flex-end"><span class="s-paid">PAID${inv.paidDate ? ' ' + esc(fmtDate(inv.paidDate)) : ''}</span></div>` : ''}
     </div>
     <div class="s-foot">
       <div>${bankLines ? `<div class="s-label">Payment details</div><div>${bankLines}</div>` : ''}</div>
@@ -1307,7 +1310,9 @@ function buildPDF(inv){
   doc.setFillColor(...NAVY); doc.rect(tx, y - 3, W - M - tx, 0.7, 'F'); y += 3.5;
   line('Total due', money(t.total, inv.currency), true);
   if (inv.status === 'paid') { doc.setDrawColor(29,122,76); doc.setTextColor(29,122,76); doc.setLineWidth(0.6); doc.roundedRect(W - M - 26, y - 2, 26, 9, 1, 1);
-    doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text('PAID', W - M - 13, y + 4.4, {align:'center'}); y += 12; }
+    doc.setFont('helvetica','bold'); doc.setFontSize(12); doc.text('PAID', W - M - 13, y + 4.4, {align:'center'});
+    if (inv.paidDate) { doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.text('on ' + fmtDate(inv.paidDate), W - M - 13, y + 11, {align:'center'}); y += 5; }
+    y += 12; }
   let fy = Math.max(y + 10, 240);
   if (fy > 270) { doc.addPage(); fy = M + 6; }
   const half = (W - 2*M) / 2 - 4;
@@ -1562,6 +1567,13 @@ function renderModal(){
   if (m.type === 'confirm') host.innerHTML = `<div class="overlay" data-close-modal><div class="modal" role="dialog" aria-modal="true" style="width:min(420px,100%)">
       <div class="panel-b stack"><h2>${esc(m.title)}</h2><p class="muted" style="margin:0">${esc(m.body)}</p></div>
       <div class="modal-f"><button class="btn" data-action="modal-cancel">Cancel</button><button class="btn danger solid" data-action="modal-ok">${esc(m.ok || 'Delete')}</button></div></div></div>`;
+  if (m.type === 'paid') { const inv = state.invoices.find(i => i.id === m.id) || {};
+    host.innerHTML = `<div class="overlay" data-close-modal><div class="modal" role="dialog" aria-modal="true" style="width:min(420px,100%)">
+      <div class="panel-b stack"><h2>Mark ${esc(inv.number || '')} as paid</h2>
+        <p class="muted" style="margin:0">${esc(inv.billTo?.name || '')}${inv.billTo?.name ? ' · ' : ''}${money(totals(inv).total, inv.currency)}</p>
+        <label class="f"><span>Date payment was made</span><input class="in" type="date" id="pay-date" value="${esc(m.date)}"></label>
+        <label class="f"><span>Payment reference or note (optional)</span><input class="in" id="pay-note" value="${esc(m.note)}" placeholder="e.g. EFT from SidXpress"></label></div>
+      <div class="modal-f"><button class="btn" data-action="modal-cancel">Cancel</button><button class="btn primary" data-action="pay-ok">${ICON.check}Mark as paid</button></div></div></div>`; return; }
   if (m.type === 'company') host.innerHTML = `<div class="overlay" data-close-modal><form class="modal" id="companyForm" role="dialog" aria-modal="true">
       <div class="panel-h"><h2>${m.id ? 'Edit company' : 'Add company'}</h2><button type="button" class="iconbtn" aria-label="Close" data-action="modal-cancel">${ICON.x}</button></div>
       <div class="panel-b">${companyForm(state.companies.find(c => c.id === m.id))}</div>
@@ -1598,7 +1610,7 @@ document.addEventListener('click', async e => {
     const d = newDraft(); const keep = {number: nextNumber(src.companyId), date:d.date, dueDate:d.dueDate};
     Object.assign(d, clone(src), keep, {id:null, status:'unpaid', weekEnding: src.weekEnding ? addDays(src.weekEnding, 7) : d.weekEnding});
     delete d.example; delete d.createdAt;
-    delete d.emails;
+    delete d.emails; delete d.paidDate; delete d.paidNote;
     d.items = d.items.map(r => { const v = {...r.values}; d.columns.forEach(c => { if (c.type === 'date' && v[c.key]) v[c.key] = addDays(v[c.key], 7); }); return {id: uid(), values: v, oversize: !!r.oversize}; });
     state.view = 'edit'; state.draft = d; render(); window.scrollTo(0,0); toast('Copied with dates moved forward one week'); return; }
   if (ds.corcDel !== undefined) { el.closest('.colrow')?.remove(); return; }
@@ -1619,7 +1631,11 @@ document.addEventListener('click', async e => {
   if (ds.elogDel) { const [iid, eid] = ds.elogDel.split('|'); const inv = state.invoices.find(i => i.id === iid); if (!inv) return;
     await safe(Store.put('invoices', inv.id, {...inv, emails: (inv.emails || []).filter(e => e.id !== eid)}), 'Entry removed'); render(); return; }
   if (ds.togglePaid) { const inv = state.invoices.find(i => i.id === ds.togglePaid); if (!inv) return;
-    await safe(Store.put('invoices', inv.id, {...inv, status: inv.status === 'paid' ? 'unpaid' : 'paid'}), inv.status === 'paid' ? 'Marked unpaid' : 'Marked paid'); render(); return; }
+    if (inv.status !== 'paid') { state.modal = {type:'paid', id: inv.id, date: isoToday(), note: ''}; renderModal(); return; }
+    confirmBox('Mark as unpaid?', `${inv.number} goes back to unpaid and its paid date is cleared.`, 'Mark unpaid', async () => {
+      const data = {...inv, status: 'unpaid'}; delete data.paidDate; delete data.paidNote; await safe(Store.put('invoices', inv.id, data), 'Marked unpaid'); render(); }); return; }
+  if (ds.payInv) { const inv = state.invoices.find(i => i.id === ds.payInv); if (!inv) return;
+    state.modal = {type:'paid', id: inv.id, date: inv.paidDate || isoToday(), note: inv.paidNote || ''}; renderModal(); setTimeout(() => $('#pay-date')?.focus(), 50); return; }
   if (ds.delInv) { const inv = state.invoices.find(i => i.id === ds.delInv);
     confirmBox(`Delete invoice ${inv?.number || ''}?`, 'This removes it for good. Download the PDF first if you need a copy.', 'Delete invoice', async () => { await safe(Store.del('invoices', ds.delInv), 'Invoice deleted'); await syncPods({id: ds.delInv, items: []}).catch(() => {}); go('invoices'); }); return; }
   if (ds.email) { const inv = state.invoices.find(i => i.id === ds.email); if (inv) sendEmail(inv, 'customer'); return; }
@@ -1692,6 +1708,10 @@ document.addEventListener('click', async e => {
     case 'add-company': state.modal = {type:'company'}; renderModal(); break;
     case 'add-company-inline': state.modal = {type:'company', inline:true}; renderModal(); break;
     case 'modal-cancel': closeModal(); break;
+    case 'pay-ok': { const m = state.modal, inv = state.invoices.find(i => i.id === m?.id); if (!inv) { closeModal(); break; }
+      const date = $('#pay-date').value; if (!date) { toast('Pick the date the payment was made.'); break; }
+      const note = $('#pay-note').value.trim(); closeModal();
+      await safe(Store.put('invoices', inv.id, {...inv, status: 'paid', paidDate: date, paidNote: note}), `${inv.number} marked paid on ${fmtDate(date)}`); render(); break; }
     case 'modal-ok': { const fn = state.modal?.fn; closeModal(); if (fn) fn(); break; }
     case 'save-settings': { const s = state.settingsDraft; s.invoice.nextNumber = Math.max(1, parseInt(s.invoice.nextNumber) || 1); s.invoice.dueDays = Math.max(0, parseInt(s.invoice.dueDays) || 0); s.invoice.taxRate = num(s.invoice.taxRate);
       s.rates.freeMinutes = Math.max(0, parseInt(s.rates.freeMinutes) || 0); s.rates.hourly = num(s.rates.hourly);
@@ -1770,7 +1790,7 @@ document.addEventListener('change', async e => {
   if (t.id === 'pickCompany' && d) { applyCompany(d, t.value); render(); toast(t.value ? 'Company details copied in' : 'Bill-to cleared'); return; }
   if (t.id === 'f-tax' && d) { d.taxEnabled = t.checked; refreshTotals(); return; }
   if (ds.overRow && d) { const r = d.items.find(x => x.id === ds.overRow); if (r) { r.oversize = t.checked; t.closest('.item')?.classList.toggle('over', t.checked); refreshTotals(); } return; }
-  if (t.id === 'f-paid' && d) { d.status = t.checked ? 'paid' : 'unpaid'; return; }
+  if (t.id === 'f-paid' && d) { d.status = t.checked ? 'paid' : 'unpaid'; if (t.checked) d.paidDate = d.paidDate || isoToday(); else { delete d.paidDate; delete d.paidNote; } render(); return; }
   if (t.id === 'f-attachPods' && d) { d.attachPods = t.checked; return; }
   if (ds.pick && state.modal?.type === 'podpick') { const m = state.modal; m.pick = t.checked ? [...new Set([...m.pick, ds.pick])] : m.pick.filter(x => x !== ds.pick); renderModal(); return; }
   if (ds.podNew !== undefined && t.files?.length) { toast('Saving photo…'); const ids = await addPodFiles([...t.files]); t.value = ''; if (ids.length) { toast(ids.length > 1 ? `${ids.length} PODs saved` : 'POD saved. Add its details now or later.'); render(); if (ids.length === 1) openPodEditor(ids[0]); } return; }

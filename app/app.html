@@ -130,8 +130,12 @@ select.in{appearance:none;background-image:linear-gradient(45deg,transparent 50%
 
 /* invoice list */
 .ilist{display:grid;gap:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
-.irow{display:grid;grid-template-columns:110px minmax(0,1fr) 130px 120px 96px;gap:14px;align-items:center;padding:14px 18px;border-top:1px solid var(--line);cursor:pointer;text-align:left;background:none;border-left:0;border-right:0;border-bottom:0;width:100%}
+.irow{display:grid;grid-template-columns:150px minmax(0,1fr) 130px 120px 96px;gap:14px;align-items:center;padding:14px 18px;border-top:1px solid var(--line);cursor:pointer;text-align:left;background:none;border-left:0;border-right:0;border-bottom:0;width:100%}
 .irow:first-child{border-top:0}
+.isel{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;margin-right:8px;border:1.5px solid var(--line);border-radius:5px;background:var(--surface);vertical-align:middle;cursor:pointer;flex:none}
+.isel[aria-checked="true"]{background:var(--accent,#E10600);border-color:var(--accent,#E10600);color:#fff}
+.isel svg{width:14px;height:14px}
+.selbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;margin-bottom:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r)}
 .irow:hover{background:var(--surface-2)}
 .irow .no{font-family:var(--f-mono);font-weight:500;font-size:14px}
 .irow .co{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -388,7 +392,7 @@ function mergeSettings(s){
 
 /* ---------- state ---------- */
 const state = {settings: mergeSettings(null), companies: [], invoices: [], pods: [], podSel: [], podFilter: 'open', ready:false, view:'invoices', viewId:null,
-  draft:null, filter:'all', q:'', modal:null, settingsDraft:null};
+  draft:null, filter:'all', q:'', modal:null, settingsDraft:null, sel:[]};
 
 /* ---------- storage: shared db when available, device storage otherwise ---------- */
 const LKEY = 'wharf-invoices-v1';
@@ -676,11 +680,14 @@ function viewInvoices(){
   ${all.length === 0 ? `<div class="panel empty">${ICON.doc}<h2>No invoices yet</h2><p class="muted" style="margin:0;max-width:40ch">Add the companies you work for, then create your first weekly invoice. Each one is saved here so you can edit, re-download or delete it later.</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center"><button class="btn" data-nav="companies">Add a company</button><button class="btn accent" data-action="new-invoice">New weekly invoice</button></div></div>`
   : list.length === 0 ? `<div class="panel empty"><p class="muted" style="margin:0">No invoices match this filter.</p></div>`
-  : `<div class="ilist">
-      <div class="irow ihead"><span>Invoice</span><span>Company</span><span class="c-week">Week ending</span><span style="text-align:right">Total</span><span>Status</span></div>
+  : `${state.sel.length ? `<div class="selbar"><b>${state.sel.length} selected</b><span style="flex:1"></span>
+      <button class="btn accent" data-action="batch-review">${ICON.mail}Email ${state.sel.length === 1 ? 'it' : 'all ' + state.sel.length} for review</button>
+      <button class="btn" data-action="sel-clear">Clear</button></div>` : ''}
+    <div class="ilist">
+      <div class="irow ihead"><span><span class="isel" data-sel-all role="checkbox" aria-label="Select all" aria-checked="${list.length && list.every(i => state.sel.includes(i.id))}">${list.length && list.every(i => state.sel.includes(i.id)) ? ICON.check : ''}</span>Invoice</span><span>Company</span><span class="c-week">Week ending</span><span style="text-align:right">Total</span><span>Status</span></div>
       ${list.map(i => { const st = statusOf(i); return `
       <button class="irow" data-open="${esc(i.id)}">
-        <span class="no">${esc(i.number)}</span>
+        <span class="no"><span class="isel" data-sel="${esc(i.id)}" role="checkbox" aria-label="Select ${esc(i.number)}" aria-checked="${state.sel.includes(i.id)}">${state.sel.includes(i.id) ? ICON.check : ''}</span>${esc(i.number)}</span>
         <span class="c-main" style="min-width:0"><div class="co">${esc(i.billTo?.name || 'No company')}${i.example ? ' <span class="muted" style="font-weight:400">(example)</span>' : ''}</div><div class="sub">Issued ${fmtDate(i.date)}${i.dueDate ? ' · due ' + fmtDate(i.dueDate) : ''}${(i.emails || []).length ? ` · <span class="emailed">${ICON.mail}Emailed ${fmtDate(String(i.emails[i.emails.length - 1].at).split('T')[0])}</span>` : ''}</div></span>
         <span class="c-week sub num">${fmtDate(i.weekEnding) || '—'}</span>
         <span class="amt">${money(totals(i).total, i.currency)}</span>
@@ -1246,12 +1253,12 @@ function sheetHTML(inv){
 }
 
 /* ---------- PDF ---------- */
-function buildPDF(inv){
+function buildPDF(inv, into){
   const J = window.jspdf && window.jspdf.jsPDF;
   if (!J) throw new Error('The PDF tool did not load. Check your connection and reload.');
   const s = state.settings, biz = s.business, bank = s.bank, t = totals(inv), b = inv.billTo || {};
   const cols = outCols(inv);
-  const doc = new J({unit:'mm', format:'a4'});
+  const doc = into ? (into.addPage(), into) : new J({unit:'mm', format:'a4'});
   const W = 210, M = 16, NAVY = [21,24,28], RED = [225,0,0], GREY = [94,110,125], INK = [20,32,43];
   try { doc.addImage(LOGO, 'PNG', M, M - 4, 24, 24 * 87 / 143); } catch(e) {}
   let y = M + 18;
@@ -1447,6 +1454,46 @@ async function sendEmail(inv, kind){
   } catch(e) { /* folder needs a click to allow; fall back to the Save window */ }
   await save();
 }
+// Several invoices in one review email: one PDF with every invoice, and a list of when each was created and emailed.
+async function sendReviewBatch(list){
+  const s = state.settings, to = String(s.invoice.reviewEmail || '').trim();
+  if (!list.length) return;
+  if (!to) { toast('Add a review email in Settings first.'); return; }
+  list = list.slice().sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || String(a.number).localeCompare(String(b.number)));
+  const day = d => d ? fmtDate(String(d).slice(0, 10)) : '';
+  const sentTo = i => { const e = (i.emails || []).filter(x => x.kind !== 'Review').map(x => x.at).sort().pop(); return e ? day(e) : 'Not emailed yet'; };
+  const grand = list.reduce((t, i) => t + totals(i).total, 0);
+  const name = `Invoices-for-review-${isoToday()}.pdf`;
+  const subject = `${list.length} invoice${list.length === 1 ? '' : 's'} for review - ${fmtDate(isoToday())}`;
+  const lines = list.map((i, n) => [`${n + 1}. ${i.number} - ${i.billTo?.name || '-'}`,
+    `   Week ending: ${fmtDate(i.weekEnding) || '-'}   Total: ${money(totals(i).total, i.currency)}   Status: ${statusLabel(i)}`,
+    `   Created: ${day(i.createdAt) || day(i.date) || '-'}   Issued: ${fmtDate(i.date) || '-'}   Emailed to customer: ${sentTo(i)}`].join('\n'));
+  const body = [`Please review these ${list.length} invoice${list.length === 1 ? '' : 's'}.`, '', ...lines, '',
+    `Total of all: ${money(grand, s.invoice.currency)}`, `Sent for review: ${fmtDate(isoToday())}`, '', `PDF attached: ${name}`].join('\n');
+  const m = {type:'mail', to, subject, body, name, note: 'Saving the PDF…'};
+  const setNote = n => { m.note = n; if (state.modal === m) renderModal(); };
+  state.modal = m; renderModal();
+  let blob;
+  try {
+    let doc = null;
+    for (const i of list) { if ((i.items || []).some(r => r.podId && !podImgs[r.podId])) await warmPodImages(i); doc = buildPDF(i, doc); }
+    blob = doc.output('blob');
+  } catch(e) { setNote('Could not make the PDF (' + e.message + '). You can still send the email.'); return; }
+  for (const i of list) { try { logEmail(i, {kind: 'Review', to, subject}); } catch(e) {} }
+  const save = async () => {
+    try {
+      if (window.showSaveFilePicker) {
+        const h = await showSaveFilePicker({id: 'sbt-invoices', startIn: 'documents', suggestedName: name, types: [{description: 'PDF invoices', accept: {'application/pdf': ['.pdf']}}]});
+        const w = await h.createWritable(); await w.write(blob); await w.close(); setNote('PDF saved in the folder you chose.');
+      } else { saveFile(blob, name); setNote('PDF saved (check your Downloads folder).'); }
+    } catch(e) {
+      if (e?.name === 'AbortError') { setNote('PDF not saved yet. Click Save PDF below first.'); return; }
+      setNote('Click Save PDF below to save the invoices first.');
+    }
+  };
+  m.save = save;
+  await save();
+}
 // Outside Claude: on iPhone/iPad, hand the file to the share sheet (Save to Files, Mail, Messages); elsewhere download it.
 async function saveFile(blob, name){
   try {
@@ -1605,12 +1652,17 @@ function renderModal(){
 }
 function closeModal(){ state.modal = null; renderModal(); }
 let toastT;
-function toast(msg){ const t = $('#toast'); t.innerHTML = `<div class="toast" role="status">${esc(msg)}</div>`; clearTimeout(toastT); toastT = setTimeout(() => { t.innerHTML = ''; }, 3200); }
+function toast(msg){ const t = $('#toast'); t.innerHTML = `<div class="toast" role="status">${esc(msg)}</div>`; clearTimeout(toastT); toastT = setTimeout(() => { t.innerHTML = ''; }, 6000); }
 function confirmBox(title, body, ok, fn){ state.modal = {type:'confirm', title, body, ok, fn}; renderModal(); }
 
 /* ---------- events ---------- */
 document.addEventListener('click', e => { if (e.target.closest('[data-mail-go]')) setTimeout(closeModal, 300); });
 document.addEventListener('click', async e => {
+  const sel = e.target.closest('[data-sel], [data-sel-all]');
+  if (sel) { e.preventDefault();
+    if (sel.dataset.sel) { const id = sel.dataset.sel; state.sel = state.sel.includes(id) ? state.sel.filter(x => x !== id) : [...state.sel, id]; }
+    else { const ids = [...document.querySelectorAll('[data-sel]')].map(x => x.dataset.sel); state.sel = ids.every(id => state.sel.includes(id)) ? [] : ids; }
+    render(); return; }
   const el = e.target.closest('button, [data-close-modal], [data-open]');
   if (!el) return;
   const ds = el.dataset;
@@ -1725,6 +1777,8 @@ document.addEventListener('click', async e => {
     case 'add-company': state.modal = {type:'company'}; renderModal(); break;
     case 'add-company-inline': state.modal = {type:'company', inline:true}; renderModal(); break;
     case 'modal-cancel': closeModal(); break;
+    case 'sel-clear': state.sel = []; render(); break;
+    case 'batch-review': sendReviewBatch(state.sel.map(id => state.invoices.find(i => i.id === id)).filter(Boolean)); break;
     case 'mail-save': { if (state.modal?.save) state.modal.save(); break; }
     case 'mail-copy': { const m = state.modal || {}; const text = `To: ${m.to}\nSubject: ${m.subject}\n\n${m.body}`;
       try { await navigator.clipboard.writeText(text); toast('Copied. Paste it into a new email and attach the PDF.'); }

@@ -1416,36 +1416,50 @@ async function sendEmail(inv, kind){
   const co = state.companies.find(c => c.id === inv.companyId);
   const to = String(review ? s.invoice.reviewEmail : (inv.billTo?.email || co?.email || '')).trim();
   if (!to) { toast(review ? 'Add a review email in Settings first.' : `Add an email for ${inv.billTo?.name || 'this company'} in Companies first.`); return; }
-  if ((inv.items || []).some(r => r.podId && !podImgs[r.podId])) await warmPodImages(inv);
-  let blob; try { blob = buildPDF(inv).output('blob'); } catch(e) { toast(e.message); return; }
-  const name = `Invoice ${inv.number} ${inv.billTo?.name || ''}`.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') + '.pdf';
-  const t = totals(inv);
-  const subject = review ? `Invoice ${inv.number} for review${inv.billTo?.name ? ' - ' + inv.billTo.name : ''}` : fillTemplate(s.invoice.emailSubject, inv).replace(/(\s*-\s*){2,}/g, ' - ').replace(/^\s*-\s*|\s*-\s*$/g, '');
-  const body = review ? [`Please review invoice ${inv.number}.`, '', `Bill to: ${inv.billTo?.name || '-'}`, inv.weekEnding ? `Week ending: ${fmtDate(inv.weekEnding)}` : '',
-    `Loads: ${(inv.items || []).length}`, `Total: ${money(t.total, inv.currency)}`, '', `PDF attached: ${name}`].join('\n') : fillTemplate(s.invoice.emailBody, inv);
-  // Show a box with real links (Gmail, Outlook/Hotmail, email app, copy). A mailto opened by script does nothing
-  // on computers with no email app set up, or after a Save window, so the person clicks the one they use.
-  const openMail = savedNote => { state.modal = {type:'mail', to, subject, body, name, note: savedNote || ''}; renderModal(); };
-  const sent = where => { logEmail(inv, {kind: review ? 'Review' : 'Invoice', to, subject}); openMail(`PDF saved in ${where}.`); };
+  let subject, body, name;
+  try {
+    name = `Invoice ${inv.number} ${inv.billTo?.name || ''}`.replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-') + '.pdf';
+    const t = totals(inv);
+    subject = review ? `Invoice ${inv.number} for review${inv.billTo?.name ? ' - ' + inv.billTo.name : ''}` : fillTemplate(s.invoice.emailSubject, inv).replace(/(\s*-\s*){2,}/g, ' - ').replace(/^\s*-\s*|\s*-\s*$/g, '');
+    body = review ? [`Please review invoice ${inv.number}.`, '', `Bill to: ${inv.billTo?.name || '-'}`, inv.weekEnding ? `Week ending: ${fmtDate(inv.weekEnding)}` : '',
+      `Loads: ${(inv.items || []).length}`, `Total: ${money(t.total, inv.currency)}`, '', `PDF attached: ${name}`].join('\n') : fillTemplate(s.invoice.emailBody, inv);
+  } catch(e) { toast('Could not prepare the email: ' + e.message); return; }
+  // Open the "Send the email" box straight away, with real links (Gmail, Outlook/Hotmail, email app, copy).
+  // The PDF is saved alongside; the box says where it went, and has a Save PDF button if that needs a click.
+  const m = {type:'mail', to, subject, body, name, note: 'Saving the PDF…'};
+  const setNote = n => { m.note = n; if (state.modal === m) renderModal(); };
+  state.modal = m; renderModal();
+  try { logEmail(inv, {kind: review ? 'Review' : 'Invoice', to, subject}); } catch(e) {}
+  let blob;
+  try {
+    if ((inv.items || []).some(r => r.podId && !podImgs[r.podId])) await warmPodImages(inv);
+    blob = buildPDF(inv).output('blob');
+  } catch(e) { setNote('Could not make the PDF (' + e.message + '). You can still send the email.'); return; }
   const save = async () => {
     try {
       if (window.showSaveFilePicker) {
         const h = await showSaveFilePicker({id: 'sbt-invoices', startIn: 'documents', suggestedName: name, types: [{description: 'PDF invoice', accept: {'application/pdf': ['.pdf']}}]});
         const w = await h.createWritable(); await w.write(blob); await w.close();
+        setNote('PDF saved in the folder you chose.');
       } else {
         const file = new File([blob], name, {type: 'application/pdf'});
         if (navigator.canShare && navigator.canShare({files:[file]})) await navigator.share({files:[file]});
-        else { saveFile(blob, name); }
+        else saveFile(blob, name);
+        setNote('PDF saved (check your Downloads folder).');
       }
     } catch(e) {
-      if (e?.name === 'AbortError') { openMail('PDF not saved. Use Download PDF first if you need to attach it.'); return; }
-      if (e?.name === 'SecurityError' || e?.name === 'NotAllowedError') { confirmBox('Save the invoice PDF', `Choose where to save ${name} (e.g. your OneDrive invoices folder). The email opens straight after.`, 'Save PDF', save); return; }
-      toast('Could not save the PDF: ' + e.message); openMail('PDF could not be saved. Use Download PDF, then attach it.'); return;
+      if (e?.name === 'AbortError') { setNote('PDF not saved yet. Click Save PDF below first.'); return; }
+      if (e?.name === 'SecurityError' || e?.name === 'NotAllowedError') { setNote('Click Save PDF below to save the invoice first.'); return; }
+      setNote('Could not save the PDF (' + e.message + '). Try Save PDF below.');
     }
-    logEmail(inv, {kind: review ? 'Review' : 'Invoice', to, subject});
-    openMail('PDF saved in the folder you chose (or your Downloads).');
   };
-  if (Folder.supported() && await Folder.get()) { folderSave(blob, name, inv, path => sent(path), save); return; }
+  m.save = save;
+  try {
+    if (Folder.supported() && await Folder.get()) {
+      const path = await saveToFolder(blob, name, inv);
+      if (path) { setNote(`PDF saved in ${path}.`); return; }
+    }
+  } catch(e) { /* folder needs a click to allow; fall back to the Save window */ }
   await save();
 }
 // Outside Claude: on iPhone/iPad, hand the file to the share sheet (Save to Files, Mail, Messages); elsewhere download it.
@@ -1581,6 +1595,8 @@ function renderModal(){
         <a class="btn" style="width:100%;justify-content:center;text-decoration:none;color:inherit" href="${esc(outlook)}" target="_blank" rel="noopener" data-mail-go>${ICON.mail}Open in Outlook / Hotmail</a>
         <a class="btn" style="width:100%;justify-content:center;text-decoration:none;color:inherit" href="${esc(mailto)}" data-mail-go>${ICON.mail}Open my email app</a>
         <button class="btn" style="width:100%;justify-content:center" data-action="mail-copy">${ICON.copy}Copy email text instead</button>
+        ${m.save ? `<button class="btn" style="width:100%;justify-content:center" data-action="mail-save">${ICON.pdf}Save PDF</button>` : ''}
+        <p class="muted" style="margin:0;font-size:11px;text-align:right">email v2</p>
       </div></div></div>`; return; }
   if (m.type === 'paid') { const inv = state.invoices.find(i => i.id === m.id) || {};
     host.innerHTML = `<div class="overlay" data-close-modal><div class="modal" role="dialog" aria-modal="true" style="width:min(420px,100%)">
@@ -1724,6 +1740,7 @@ document.addEventListener('click', async e => {
     case 'add-company': state.modal = {type:'company'}; renderModal(); break;
     case 'add-company-inline': state.modal = {type:'company', inline:true}; renderModal(); break;
     case 'modal-cancel': closeModal(); break;
+    case 'mail-save': { if (state.modal?.save) state.modal.save(); break; }
     case 'mail-copy': { const m = state.modal || {}; const text = `To: ${m.to}\nSubject: ${m.subject}\n\n${m.body}`;
       try { await navigator.clipboard.writeText(text); toast('Copied. Paste it into a new email and attach the PDF.'); }
       catch(err) { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('Copied. Paste it into a new email and attach the PDF.'); } catch(e2) { toast('Could not copy on this device.'); } ta.remove(); }

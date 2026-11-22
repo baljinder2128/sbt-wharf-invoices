@@ -1423,8 +1423,10 @@ async function sendEmail(inv, kind){
   const subject = review ? `Invoice ${inv.number} for review${inv.billTo?.name ? ' - ' + inv.billTo.name : ''}` : fillTemplate(s.invoice.emailSubject, inv).replace(/(\s*-\s*){2,}/g, ' - ').replace(/^\s*-\s*|\s*-\s*$/g, '');
   const body = review ? [`Please review invoice ${inv.number}.`, '', `Bill to: ${inv.billTo?.name || '-'}`, inv.weekEnding ? `Week ending: ${fmtDate(inv.weekEnding)}` : '',
     `Loads: ${(inv.items || []).length}`, `Total: ${money(t.total, inv.currency)}`, '', `PDF attached: ${name}`].join('\n') : fillTemplate(s.invoice.emailBody, inv);
-  const openMail = () => { location.href = `mailto:${to}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`; };
-  const sent = where => { toast(`Email opening. Attach ${name} from ${where}.`); logEmail(inv, {kind: review ? 'Review' : 'Invoice', to, subject}); setTimeout(openMail, 400); };
+  // Show a box with real links (Gmail, Outlook/Hotmail, email app, copy). A mailto opened by script does nothing
+  // on computers with no email app set up, or after a Save window, so the person clicks the one they use.
+  const openMail = savedNote => { state.modal = {type:'mail', to, subject, body, name, note: savedNote || ''}; renderModal(); };
+  const sent = where => { logEmail(inv, {kind: review ? 'Review' : 'Invoice', to, subject}); openMail(`PDF saved in ${where}.`); };
   const save = async () => {
     try {
       if (window.showSaveFilePicker) {
@@ -1436,13 +1438,12 @@ async function sendEmail(inv, kind){
         else { saveFile(blob, name); }
       }
     } catch(e) {
-      if (e?.name === 'AbortError') return;
+      if (e?.name === 'AbortError') { openMail('PDF not saved. Use Download PDF first if you need to attach it.'); return; }
       if (e?.name === 'SecurityError' || e?.name === 'NotAllowedError') { confirmBox('Save the invoice PDF', `Choose where to save ${name} (e.g. your OneDrive invoices folder). The email opens straight after.`, 'Save PDF', save); return; }
-      toast('Could not save the PDF: ' + e.message); return;
+      toast('Could not save the PDF: ' + e.message); openMail('PDF could not be saved. Use Download PDF, then attach it.'); return;
     }
-    toast(`Email opening. Attach ${name} from the folder you saved it in.`);
     logEmail(inv, {kind: review ? 'Review' : 'Invoice', to, subject});
-    setTimeout(openMail, 400);
+    openMail('PDF saved in the folder you chose (or your Downloads).');
   };
   if (Folder.supported() && await Folder.get()) { folderSave(blob, name, inv, path => sent(path), save); return; }
   await save();
@@ -1567,6 +1568,20 @@ function renderModal(){
   if (m.type === 'confirm') host.innerHTML = `<div class="overlay" data-close-modal><div class="modal" role="dialog" aria-modal="true" style="width:min(420px,100%)">
       <div class="panel-b stack"><h2>${esc(m.title)}</h2><p class="muted" style="margin:0">${esc(m.body)}</p></div>
       <div class="modal-f"><button class="btn" data-action="modal-cancel">Cancel</button><button class="btn danger solid" data-action="modal-ok">${esc(m.ok || 'Delete')}</button></div></div></div>`;
+  if (m.type === 'mail') { const q = encodeURIComponent, to = m.to, su = q(m.subject), bo = q(m.body);
+    const gmail = `https://mail.google.com/mail/?view=cm&fs=1&to=${q(to)}&su=${su}&body=${bo}`;
+    const outlook = `https://outlook.live.com/mail/0/deeplink/compose?to=${q(to)}&subject=${su}&body=${bo}`;
+    const mailto = `mailto:${to}?subject=${su}&body=${bo}`;
+    host.innerHTML = `<div class="overlay" data-close-modal><div class="modal" role="dialog" aria-modal="true" style="width:min(460px,100%)">
+      <div class="panel-h"><h2>Send the email</h2><button type="button" class="iconbtn" aria-label="Close" data-action="modal-cancel">${ICON.x}</button></div>
+      <div class="panel-b stack">
+        ${m.note ? `<p style="margin:0;font-weight:600">${esc(m.note)}</p>` : ''}
+        <p class="muted" style="margin:0">To: ${esc(to)}<br>Click the email you use. It opens a new email with everything filled in. Then attach <b>${esc(m.name)}</b> and press Send.</p>
+        <a class="btn accent" style="width:100%;justify-content:center;text-decoration:none" href="${esc(gmail)}" target="_blank" rel="noopener" data-mail-go>${ICON.mail}Open in Gmail</a>
+        <a class="btn" style="width:100%;justify-content:center;text-decoration:none;color:inherit" href="${esc(outlook)}" target="_blank" rel="noopener" data-mail-go>${ICON.mail}Open in Outlook / Hotmail</a>
+        <a class="btn" style="width:100%;justify-content:center;text-decoration:none;color:inherit" href="${esc(mailto)}" data-mail-go>${ICON.mail}Open my email app</a>
+        <button class="btn" style="width:100%;justify-content:center" data-action="mail-copy">${ICON.copy}Copy email text instead</button>
+      </div></div></div>`; return; }
   if (m.type === 'paid') { const inv = state.invoices.find(i => i.id === m.id) || {};
     host.innerHTML = `<div class="overlay" data-close-modal><div class="modal" role="dialog" aria-modal="true" style="width:min(420px,100%)">
       <div class="panel-b stack"><h2>Mark ${esc(inv.number || '')} as paid</h2>
@@ -1593,6 +1608,7 @@ function toast(msg){ const t = $('#toast'); t.innerHTML = `<div class="toast" ro
 function confirmBox(title, body, ok, fn){ state.modal = {type:'confirm', title, body, ok, fn}; renderModal(); }
 
 /* ---------- events ---------- */
+document.addEventListener('click', e => { if (e.target.closest('[data-mail-go]')) setTimeout(closeModal, 300); });
 document.addEventListener('click', async e => {
   const el = e.target.closest('button, [data-close-modal], [data-open]');
   if (!el) return;
@@ -1708,6 +1724,10 @@ document.addEventListener('click', async e => {
     case 'add-company': state.modal = {type:'company'}; renderModal(); break;
     case 'add-company-inline': state.modal = {type:'company', inline:true}; renderModal(); break;
     case 'modal-cancel': closeModal(); break;
+    case 'mail-copy': { const m = state.modal || {}; const text = `To: ${m.to}\nSubject: ${m.subject}\n\n${m.body}`;
+      try { await navigator.clipboard.writeText(text); toast('Copied. Paste it into a new email and attach the PDF.'); }
+      catch(err) { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('Copied. Paste it into a new email and attach the PDF.'); } catch(e2) { toast('Could not copy on this device.'); } ta.remove(); }
+      break; }
     case 'pay-ok': { const m = state.modal, inv = state.invoices.find(i => i.id === m?.id); if (!inv) { closeModal(); break; }
       const date = $('#pay-date').value; if (!date) { toast('Pick the date the payment was made.'); break; }
       const note = $('#pay-note').value.trim(); closeModal();
